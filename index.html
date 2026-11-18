@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Galesh Nesta – Character</title>
+<meta name="theme-color" content="#221E2D">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Grenze:wght@500;600;700&family=Alegreya+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F2EFF6; --panel:#FFFFFF; --panel2:#E9E4F1; --ink:#221C2E; --muted:#6B6280;
+  --line:#D6CFE2; --hex:#2D7F55; --hexSoft:#D7EFE0; --gold:#8C6A16; --goldSoft:#F3E8C9;
+  --blood:#B3364A; --bloodSoft:#F6DCE1; --violet:#5B3FA0;
+  --display:"Grenze", "Palatino Linotype", Georgia, serif;
+  --body:"Alegreya Sans", "Segoe UI", system-ui, sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#17141F; --panel:#221E2D; --panel2:#2C2639; --ink:#ECE7F4; --muted:#A49BB8; --line:#3A3349;
+    --hex:#7BD69A; --hexSoft:#203A2B; --gold:#E2BE62; --goldSoft:#3A3020; --blood:#F07A8C; --bloodSoft:#40212A; --violet:#B39BF0;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#17141F; --panel:#221E2D; --panel2:#2C2639; --ink:#ECE7F4; --muted:#A49BB8; --line:#3A3349;
+  --hex:#7BD69A; --hexSoft:#203A2B; --gold:#E2BE62; --goldSoft:#3A3020; --blood:#F07A8C; --bloodSoft:#40212A; --violet:#B39BF0;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.45;-webkit-tap-highlight-color:transparent}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--panel)}
+button{font:inherit;color:inherit;cursor:pointer}
+input,textarea,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--violet);outline-offset:2px}
+
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--panel);border-bottom:1px solid var(--line)}
+.topin{max-width:1200px;margin:0 auto;padding:10px 16px 0;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.who{flex:1 1 260px;min-width:0}
+.who h1{font-family:var(--display);font-weight:700;font-size:30px;line-height:1;margin:0;letter-spacing:.01em}
+.who p{margin:2px 0 0;color:var(--muted);font-size:15px}
+.vitals{display:flex;gap:8px;align-items:stretch;flex-wrap:wrap}
+.vit{background:var(--panel2);border-radius:10px;padding:4px 12px;text-align:center;min-width:64px}
+.vit b{display:block;font-family:var(--display);font-size:24px;line-height:1.1}
+.vit span{font-size:12px;color:var(--muted)}
+.vit.hp b{color:var(--blood)}
+.vit.conc{background:var(--hexSoft)} .vit.conc b{font-size:15px;color:var(--hex);font-family:var(--body);font-weight:700;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rests{display:flex;gap:8px}
+nav.tabs{max-width:1200px;margin:0 auto;display:flex;gap:2px;overflow-x:auto;padding:8px 12px 0;scrollbar-width:none}
+nav.tabs button{background:none;border:0;padding:10px 16px 12px;font-family:var(--display);font-size:20px;color:var(--muted);border-bottom:3px solid transparent;white-space:nowrap}
+nav.tabs button[aria-selected="true"]{color:var(--ink);border-color:var(--hex)}
+
+main{max-width:1200px;margin:0 auto;padding:16px}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.card h2{font-family:var(--display);font-weight:600;font-size:23px;margin:0 0 10px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.card h3{font-family:var(--display);font-weight:600;font-size:19px;margin:14px 0 6px}
+.muted{color:var(--muted)} .small{font-size:14px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 14px;min-height:44px}
+.btn.pri{background:var(--hex);border-color:var(--hex);color:var(--panel)}
+.btn.dmg{background:var(--blood);border-color:var(--blood);color:#fff}
+.btn.gold{background:var(--gold);border-color:var(--gold);color:var(--panel)}
+.btn.sm{min-height:36px;padding:5px 10px;font-size:15px}
+.btn.ghost{background:none}
+.x{background:none;border:0;color:var(--muted);font-size:20px;min-width:36px;min-height:36px;border-radius:8px}
+.x:hover{color:var(--blood)}
+.in{background:var(--panel2);border:1px solid transparent;border-radius:8px;padding:6px 8px;min-height:38px;width:100%}
+.in:focus{border-color:var(--violet);outline:none}
+.in.num{width:84px;text-align:center}
+.in.bare{background:transparent}
+.in.bare:hover{background:var(--panel2)}
+textarea.in{min-height:120px;resize:vertical}
+
+/* abilities */
+.abils{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+@media (max-width:620px){.abils{grid-template-columns:repeat(3,1fr)}}
+.ab{background:var(--panel2);border-radius:12px;padding:8px 4px;text-align:center}
+.ab .k{font-size:13px;color:var(--muted)}
+.ab .m{font-family:var(--display);font-size:32px;line-height:1.05}
+.ab input{width:56px;text-align:center;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:2px;min-height:32px}
+.list{display:grid;gap:2px}
+.li{display:flex;align-items:center;gap:10px;padding:6px 4px;border-radius:8px}
+.li:nth-child(odd){background:color-mix(in srgb,var(--panel2) 50%,transparent)}
+.li .v{font-family:var(--display);font-size:20px;min-width:40px;text-align:right}
+.li .n{flex:1}
+.dot{width:26px;height:26px;border-radius:50%;border:2px solid var(--muted);background:none;flex:none;padding:0;position:relative}
+.dot.on{background:var(--hex);border-color:var(--hex)}
+.dot.ex{background:var(--hex);border-color:var(--gold);box-shadow:0 0 0 2px var(--gold)}
+
+/* hp */
+.hpbig{display:flex;align-items:baseline;gap:8px;font-family:var(--display)}
+.hpbig .cur{font-size:64px;line-height:1;color:var(--blood)}
+.hpbig .max{font-size:26px;color:var(--muted)}
+.bar{height:12px;background:var(--panel2);border-radius:6px;overflow:hidden;margin:8px 0 12px}
+.bar i{display:block;height:100%;background:var(--blood);transition:width .3s}
+.bar i.t{background:var(--violet)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:6px 14px;min-height:38px;font-size:15px}
+.chip.on{background:var(--bloodSoft);border-color:var(--blood);color:var(--blood);font-weight:700}
+.pips{display:flex;gap:6px;flex-wrap:wrap}
+.pip{width:34px;height:34px;border-radius:8px;border:2px solid var(--hex);background:var(--hex);padding:0}
+.pip.used{background:none;opacity:.55}
+.pip.pact{border-color:var(--violet);background:var(--violet)} .pip.pact.used{background:none}
+.pip.fail{border-color:var(--blood);background:none} .pip.fail.on{background:var(--blood)}
+.pip.succ{background:none} .pip.succ.on{background:var(--hex)}
+
+.atk{display:grid;grid-template-columns:1.4fr 70px 1.2fr 36px;gap:6px;align-items:center;margin-bottom:6px}
+.atk .note{grid-column:1/-1;margin-top:-4px}
+.feat{border-top:1px solid var(--line);padding:10px 0}
+.feat:first-of-type{border-top:0}
+.feat .hd{display:flex;align-items:center;gap:8px}
+.feat .hd .in{font-weight:700}
+
+/* spells */
+.casters{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:16px}
+.caster{border-radius:12px;padding:10px 14px;background:var(--panel);border:1px solid var(--line)}
+.caster b{font-family:var(--display);font-size:20px;display:block}
+.caster .nums{display:flex;gap:16px;margin-top:4px}
+.caster .nums div{font-size:13px;color:var(--muted)} .caster .nums strong{display:block;font-size:22px;color:var(--ink);font-family:var(--display)}
+.slotrow{display:flex;align-items:center;gap:12px;padding:6px 0;border-top:1px solid var(--line)}
+.slotrow:first-child{border-top:0}
+.slotrow .lv{font-family:var(--display);font-size:20px;width:70px}
+.sp{display:flex;align-items:center;gap:8px;padding:7px 4px;border-top:1px solid var(--line)}
+.sp .nm{flex:1;min-width:0}
+.sp .nm .in{font-weight:600}
+.tag{font-size:12px;border:1px solid var(--line);border-radius:6px;padding:2px 7px;color:var(--muted);background:none;min-height:28px}
+.tag.on{color:var(--violet);border-color:var(--violet)}
+.tag.prep{min-width:84px}
+.tag.prep.on{color:var(--hex);border-color:var(--hex);background:var(--hexSoft);font-weight:700}
+.sp.unprep .nm{opacity:.55}
+.src-warlock{border-left:4px solid var(--violet)} .src-wizard{border-left:4px solid var(--hex)} .src-sorcerer{border-left:4px solid var(--gold)}
+.lvlhd{font-family:var(--display);font-size:20px;margin:16px 0 2px;color:var(--muted)}
+
+/* coins/town */
+.coins{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.coin{text-align:center;background:var(--panel2);border-radius:12px;padding:8px}
+.coin .k{font-size:13px;color:var(--muted)} .coin input{width:100%;text-align:center;font-family:var(--display);font-size:22px;background:transparent;border:0;padding:0}
+.coin.gp{background:var(--goldSoft)}
+.treasury{font-family:var(--display);font-size:56px;line-height:1;color:var(--gold)}
+.money{display:grid;grid-template-columns:1fr 110px 36px;gap:6px;align-items:center;margin-bottom:6px}
+.net{font-family:var(--display);font-size:24px}
+.pos{color:var(--hex)} .neg{color:var(--blood)}
+.log{max-height:360px;overflow:auto}
+.log div{padding:6px 0;border-top:1px solid var(--line);display:flex;gap:10px}
+.log div:first-child{border-top:0}
+.log .t{color:var(--muted);font-size:14px;min-width:56px}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.stat{background:var(--panel2);border-radius:12px;padding:8px}
+.stat .row{flex-wrap:nowrap}
+.stat .val{font-family:var(--display);font-size:28px;text-align:center;flex:1}
+.proj{display:grid;grid-template-columns:1fr 100px 120px 36px;gap:6px;align-items:center;margin-bottom:6px}
+@media (max-width:560px){.proj{grid-template-columns:1fr 90px 36px}.proj .stsel{grid-column:1/3}}
+
+/* modal + toast */
+.scrim{position:fixed;inset:0;background:rgba(10,6,20,.5);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
+.modal{background:var(--panel);border-radius:16px;padding:20px;max-width:440px;width:100%;max-height:85vh;overflow:auto;border:1px solid var(--line)}
+.modal h2{font-family:var(--display);margin:0 0 8px;font-size:26px}
+.modal .btn{width:100%;margin-top:8px;text-align:left}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:12px;z-index:60;max-width:90vw;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.show{opacity:1}
+.syncpill{border:1px solid var(--gold);background:var(--goldSoft);color:var(--gold);border-radius:999px;padding:6px 14px;min-height:38px;font-weight:700;font-size:14px}
+.syncpill[hidden]{display:none}
+.savestate{font-size:13px;color:var(--muted)}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+<script src="./config.js"></script>
+<script src="./supabase.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="topin">
+    <div class="who"><h1 id="hName"></h1><p id="hSub"></p></div>
+    <div class="vitals" id="vitals"></div>
+    <button id="syncPill" class="syncpill" data-a="resync" hidden></button>
+    <div class="rests">
+      <button class="btn" data-a="shortRest">Short rest</button>
+      <button class="btn" data-a="longRest">Long rest</button>
+    </div>
+  </div>
+  <nav class="tabs" role="tablist" id="tabs"></nav>
+</header>
+<main id="main"></main>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="modalRoot"></div>
+
+<script>
+"use strict";
+const SKILLS=[["acrobatics","Acrobatics","dex"],["animal","Animal Handling","wis"],["arcana","Arcana","int"],["athletics","Athletics","str"],["deception","Deception","cha"],["history","History","int"],["insight","Insight","wis"],["intimidation","Intimidation","cha"],["investigation","Investigation","int"],["medicine","Medicine","wis"],["nature","Nature","int"],["perception","Perception","wis"],["performance","Performance","cha"],["persuasion","Persuasion","cha"],["religion","Religion","int"],["sleight","Sleight of Hand","dex"],["stealth","Stealth","dex"],["survival","Survival","wis"]];
+const ABILS=[["str","Strength"],["dex","Dexterity"],["con","Constitution"],["int","Intelligence"],["wis","Wisdom"],["cha","Charisma"]];
+const CONDS=["Blinded","Charmed","Deafened","Frightened","Grappled","Incapacitated","Invisible","Paralyzed","Petrified","Poisoned","Prone","Restrained","Stunned","Unconscious"];
+const ORD=["Cantrips","1st","2nd","3rd","4th","5th","6th","7th","8th","9th"];
+
+const PREP_DEFAULT=new Set(["Shield","Catapult","Detect Magic","Invisibility","Darkvision","Locate Object","Fireball","Spirit Shroud","Dispel Magic","Slow"]);
+function sp(name,lvl,src,r,c){return {name,lvl,src,r:!!r,c:!!c,prep:src!=="wizard"||lvl===0||PREP_DEFAULT.has(name),note:""}}
+const DEFAULT={
+  v:3, updatedAt:0,
+  name:"Galesh Nesta", race:"Changeling", classes:"Warlock 3 (Hexblade) / Wizard 6", background:"Custom", alignment:"Chaotic",
+  prof:3, wizLevel:6,
+  abil:{str:5,dex:16,con:16,int:18,wis:16,cha:20},
+  saves:{con:1,int:1,wis:1},
+  skills:{acrobatics:1,deception:1,history:1,intimidation:1,investigation:1,performance:1,persuasion:1},
+  hp:{max:75,cur:19,temp:0}, ac:16, shield:false, speed:30, initMisc:0,
+  conc:"", death:{s:0,f:0},
+  hd:[{die:8,total:3,used:0},{die:6,total:6,used:0}],
+  conditions:[], exhaustion:0,
+  attacks:[
+    {name:"Greatsword (pact weapon)",bonus:"+8",dmg:"2d6+5 slashing",note:"Hex Warrior: attacks with Charisma. Two-handed, heavy."},
+    {name:"Eldritch Blast",bonus:"+8",dmg:"1d10+5 force ×2 beams",note:"120 ft. Agonizing Blast adds Cha to each beam. Roll each beam separately."},
+    {name:"Booming Blade",bonus:"+8",dmg:"weapon +1d8 thunder",note:"If the target willingly moves before your next turn: 2d8 thunder."},
+    {name:"Green-Flame Blade",bonus:"+8",dmg:"weapon +1d8 fire",note:"Another creature within 5 ft takes 1d8+4 fire (wizard cantrip, Int)."}
+  ],
+  features:[
+    {name:"Hexblade’s Curse",max:1,used:0,reset:"short",text:"Bonus action, 30 ft, 1 minute. Add proficiency bonus to damage against the target, crit on 19–20, and regain HP equal to warlock level + Cha mod if it dies."},
+    {name:"Arcane Recovery",max:1,used:0,reset:"long",text:"Once per day on a short rest, recover expended spell slots totaling up to 3 levels (none 6th level or higher)."},
+    {name:"Cantrip Formulas",max:1,used:0,reset:"long",text:"After a long rest, swap one wizard cantrip you know for another cantrip from the wizard list. Use the swap button on the Spells tab."},
+    {name:"Hex Warrior",max:0,used:0,reset:"none",text:"Use Charisma for attack and damage rolls with your pact weapon."},
+    {name:"Pact of the Blade",max:0,used:0,reset:"none",text:"Summon your pact weapon as an action."},
+    {name:"Agonizing Blast",max:0,used:0,reset:"none",text:"Add Charisma modifier to Eldritch Blast damage."},
+    {name:"Devil’s Sight",max:0,used:0,reset:"none",text:"See normally in darkness, magical and nonmagical, to 120 ft."},
+    {name:"Beguiling Influence",max:0,used:0,reset:"none",text:"Proficiency in Deception and Persuasion."},
+    {name:"Shapechanger",max:0,used:0,reset:"none",text:"Action: change your appearance and voice."},
+    {name:"Shard of Limbo",max:0,used:0,reset:"none",text:"From your sheet – add what it does."},
+    {name:"Elektro… ateş (check name)",max:0,used:0,reset:"none",text:"From your sheet – the handwriting was hard to read."},
+    {name:"Doğada Ejderha",max:0,used:0,reset:"none",text:"From your sheet – add what it does."},
+    {name:"Hindan Masalı",max:0,used:0,reset:"none",text:"From your sheet – add what it does."},
+    {name:"Mana Kristali",max:0,used:0,reset:"none",text:"From your sheet – add what it does."}
+  ],
+  slots:{1:{max:4,used:0},2:{max:3,used:0},3:{max:3,used:0},4:{max:0,used:0},5:{max:0,used:0},6:{max:0,used:0},7:{max:0,used:0},8:{max:0,used:0},9:{max:0,used:0}},
+  pact:{level:2,max:2,used:0},
+  sources:{
+    warlock:{label:"Warlock",abil:"cha"},
+    wizard:{label:"Wizard",abil:"int"},
+    sorcerer:{label:"Sorcerer (Magic Initiate)",abil:"cha"}
+  },
+  spells:[
+    sp("Eldritch Blast",0,"warlock"),sp("Booming Blade",0,"warlock"),
+    sp("Armor of Agathys",1,"warlock"),sp("Wrathful Smite",1,"warlock",0,1),sp("Arms of Hadar",1,"warlock"),sp("Hex",1,"warlock",0,1),
+    sp("Green-Flame Blade",0,"wizard"),sp("Mold Earth",0,"wizard"),sp("Shape Water",0,"wizard"),sp("Prestidigitation",0,"wizard"),
+    sp("Shield",1,"wizard"),sp("Alarm",1,"wizard",1),sp("Comprehend Languages",1,"wizard",1),sp("Detect Magic",1,"wizard",1,1),sp("Find Familiar",1,"wizard",1),sp("Catapult",1,"wizard"),
+    sp("Invisibility",2,"wizard",0,1),sp("Darkvision",2,"wizard"),sp("Augury",2,"wizard",1),sp("Locate Object",2,"wizard",0,1),
+    sp("Fireball",3,"wizard"),sp("Leomund’s Tiny Hut",3,"wizard",1),sp("Spirit Shroud",3,"wizard",0,1),sp("Dispel Magic",3,"wizard"),sp("Slow",3,"wizard",0,1),
+    sp("Acid Splash",0,"sorcerer"),sp("Poison Spray",0,"sorcerer"),sp("Minor Illusion",0,"sorcerer"),sp("Thaumaturgy",0,"sorcerer"),
+    sp("Chromatic Orb",1,"sorcerer"),sp("Darkness",2,"sorcerer",0,1),sp("Daylight",3,"sorcerer"),sp("Counterspell",3,"sorcerer")
+  ],
+  coins:{cp:0,sp:0,ep:0,gp:40000,pp:0},
+  items:[{name:"Greatsword (pact weapon)",qty:1,note:"",attune:false}],
+  profText:"Tinker’s tools\nLanguages: Common, Infernal, Celestial",
+  notes:"",
+  town:{
+    name:"My town", turn:1, treasury:20000,
+    income:[{name:"Tariffs",amt:1000},{name:"Taxes",amt:5600}],
+    expenses:[{name:"Wages",amt:1000},{name:"Upkeep",amt:600}],
+    stats:[], projects:[{name:"Wizard tower",cost:0,status:"Planned"},{name:"Walls",cost:0,status:"Planned"}], log:[]
+  }
+};
+
+let S=migrate(load());
+let tab="combat";
+let spellFilter="all";
+
+function clone(o){return JSON.parse(JSON.stringify(o))}
+function merge(base,over){ if(Array.isArray(base)||typeof base!=="object"||base===null) return over===undefined?base:over;
+  const out={...base}; if(over&&typeof over==="object") for(const k in over){ out[k]=(k in base && base[k]&&typeof base[k]==="object"&&!Array.isArray(base[k]))?merge(base[k],over[k]):over[k]; } return out; }
+function migrate(o){
+  if((o.v||1)<2){
+    if(o.name==="Cadesh Nesta")o.name="Galesh Nesta";
+    if(o.town&&Number(o.town.treasury)===40000)o.town.treasury=20000;
+    if(o.coins&&Number(o.coins.gp)===10450)o.coins.gp=40000;
+    if(o.town){const have=new Set((o.town.projects||[]).map(p=>(p.name||"").toLowerCase()));["Wizard tower","Walls"].forEach(n=>{if(!have.has(n.toLowerCase()))o.town.projects.push({name:n,cost:0,status:"Planned"})});}
+    (o.spells||[]).forEach(s=>{if(s.src==="wizard"&&s.lvl>0)s.prep=PREP_DEFAULT.has(s.name)});
+    if(!o.wizLevel)o.wizLevel=6;
+    o.v=2; o.updatedAt=Date.now();
+  }
+  if((o.v||1)<3){
+    o.features=o.features||[];
+    if(!o.features.some(f=>f.name==="Cantrip Formulas")){const ix=o.features.findIndex(f=>f.name==="Arcane Recovery");o.features.splice(ix>=0?ix+1:o.features.length,0,{name:"Cantrip Formulas",max:1,used:0,reset:"long",text:"After a long rest, swap one wizard cantrip you know for another cantrip from the wizard list. Use the swap button on the Spells tab."});}
+    o.v=3; o.updatedAt=Date.now();
+  }
+  return o;
+}
+const WIZ_CANTRIPS=["Acid Splash","Blade Ward","Booming Blade","Chill Touch","Control Flames","Create Bonfire","Dancing Lights","Fire Bolt","Friends","Frostbite","Green-Flame Blade","Gust","Infestation","Light","Lightning Lure","Mage Hand","Mending","Message","Mind Sliver","Minor Illusion","Mold Earth","Poison Spray","Prestidigitation","Ray of Frost","Shape Water","Shocking Grasp","Sword Burst","Thunderclap","Toll the Dead","True Strike"];
+function cfFeature(){let f=S.features.find(f=>f.name==="Cantrip Formulas");if(!f){f={name:"Cantrip Formulas",max:1,used:0,reset:"long",text:"After a long rest, swap one wizard cantrip you know for another cantrip from the wizard list."};S.features.push(f);}return f}
+function prepLimit(){return Math.max(1,mod(S.abil.int)+Number(S.wizLevel||0))}
+function prepCount(){return S.spells.filter(s=>s.src==="wizard"&&s.lvl>0&&s.prep).length}
+function isReady(s){return s.lvl===0||s.src!=="wizard"||s.prep}
+function load(){ try{const raw=localStorage.getItem("dnd-sheet-v1"); if(raw) return merge(clone(DEFAULT),JSON.parse(raw));}catch(e){} return clone(DEFAULT); }
+/* ---------- helpers ---------- */
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const mod=s=>Math.floor((s-10)/2);
+const sgn=n=>(n>=0?"+":"−")+Math.abs(n);
+const fmt=n=>Number(n||0).toLocaleString("en-US");
+function getP(path){return path.split(".").reduce((o,k)=>o?.[k],S)}
+function setP(path,val){const ks=path.split(".");let o=S;for(let i=0;i<ks.length-1;i++)o=o[ks[i]];o[ks.at(-1)]=val}
+function totalLevel(){return S.hd.reduce((a,h)=>a+Number(h.total||0),0)}
+function acNow(){return Number(S.ac)+(S.shield?5:0)}
+function toast(msg,ms=2600){const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),ms)}
+function roll(d){return 1+Math.floor(Math.random()*d)}
+
+/* ---------- header ---------- */
+function renderHeader(){
+  document.getElementById("hName").textContent=S.name||"Unnamed";
+  document.getElementById("hSub").textContent=[S.race,S.classes].filter(Boolean).join(", ");
+  const conc=S.conc?`<button class="vit conc" data-a="dropConc" title="Tap to drop concentration"><b>${esc(S.conc)}</b><span>Concentrating · tap to end</span></button>`:"";
+  document.getElementById("vitals").innerHTML=`
+    <div class="vit hp"><b>${S.hp.cur}${S.hp.temp?`<small style="color:var(--violet);font-size:16px"> +${S.hp.temp}</small>`:""}</b><span>HP / ${S.hp.max}</span></div>
+    <div class="vit"><b>${acNow()}</b><span>AC${S.shield?" (Shield)":""}</span></div>
+    <div class="vit"><b>${sgn(mod(S.abil.dex)+Number(S.initMisc||0))}</b><span>Init</span></div>
+    <div class="vit"><b>${S.speed}</b><span>Speed</span></div>${conc}`;
+  const tabs=[["combat","Combat"],["spells","Spells"],["character","Character"],["inventory","Inventory"],["town","Town"],["notes","Notes"],["sync","Sync"]];
+  document.getElementById("tabs").innerHTML=tabs.map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" data-a="tab" data-k="${k}">${l}</button>`).join("");
+}
+
+/* ---------- combat ---------- */
+function renderCombat(){
+  const pct=Math.max(0,Math.min(100,S.hp.cur/S.hp.max*100));
+  const tpct=Math.min(100-pct,S.hp.temp/S.hp.max*100);
+  const down=S.hp.cur<=0;
+  return `<div class="grid">
+  <section class="card">
+    <h2>Hit points</h2>
+    <div class="hpbig"><span class="cur">${S.hp.cur}</span><span class="max">/ <input class="in num bare" type="number" data-b="hp.max" value="${S.hp.max}" aria-label="Max HP" style="font-size:22px;width:70px"></span>
+      ${S.hp.temp?`<span style="color:var(--violet);font-size:26px">+${S.hp.temp} temp</span>`:""}</div>
+    <div class="bar" style="display:flex"><i style="width:${pct}%"></i><i class="t" style="width:${tpct}%"></i></div>
+    <div class="row">
+      <input id="hpAmt" class="in num" type="number" inputmode="numeric" min="0" placeholder="0" aria-label="Amount">
+      <button class="btn dmg" data-a="hp" data-k="dmg">Damage</button>
+      <button class="btn pri" data-a="hp" data-k="heal">Heal</button>
+      <button class="btn" data-a="hp" data-k="temp">Set temp</button>
+    </div>
+    ${down?`<h3>Death saves</h3>
+    <div class="row"><span style="width:80px">Successes</span><div class="pips">${[0,1,2].map(i=>`<button class="pip succ ${S.death.s>i?"on":""}" data-a="death" data-k="s" data-i="${i}" aria-label="Success ${i+1}"></button>`).join("")}</div></div>
+    <div class="row" style="margin-top:6px"><span style="width:80px">Failures</span><div class="pips">${[0,1,2].map(i=>`<button class="pip fail ${S.death.f>i?"on":""}" data-a="death" data-k="f" data-i="${i}" aria-label="Failure ${i+1}"></button>`).join("")}</div></div>`:""}
+    <h3>Hit dice</h3>
+    ${S.hd.map((h,i)=>`<div class="row" style="margin-bottom:6px"><span style="width:56px;font-family:var(--display);font-size:20px">d${h.die}</span>
+      <div class="pips">${Array.from({length:h.total},(_,j)=>`<span class="pip ${j<h.total-h.used?"":"used"}" style="width:22px;height:22px"></span>`).join("")}</div>
+      <span class="muted small">${h.total-h.used}/${h.total}</span></div>`).join("")}
+  </section>
+
+  <section class="card">
+    <h2>Defense</h2>
+    <div class="row" style="gap:16px">
+      <div class="vit" style="min-width:110px"><b style="font-size:40px">${acNow()}</b><span>Armor class</span></div>
+      <div>
+        <label class="row small muted">Base AC <input class="in num" type="number" data-b="ac" value="${S.ac}"></label>
+        <button class="chip ${S.shield?"on":""}" data-a="toggleShield" style="margin-top:8px">Shield spell (+5)</button>
+      </div>
+    </div>
+    <h3>Concentration</h3>
+    <div class="row"><input class="in" data-b="conc" value="${esc(S.conc)}" placeholder="Not concentrating" style="flex:1">${S.conc?`<button class="btn sm" data-a="dropConc">End</button>`:""}</div>
+    <h3>Conditions</h3>
+    <div class="chips">${CONDS.map(c=>`<button class="chip ${S.conditions.includes(c)?"on":""}" data-a="cond" data-k="${c}">${c}</button>`).join("")}</div>
+    <h3>Exhaustion</h3>
+    <div class="row"><div class="pips">${[1,2,3,4,5,6].map(i=>`<button class="pip fail ${S.exhaustion>=i?"on":""}" data-a="exh" data-i="${i}" aria-label="Exhaustion level ${i}">${i}</button>`).join("")}</div>
+      <span class="muted small">${S.exhaustion?["","Disadvantage on ability checks","Speed halved","Disadvantage on attacks and saves","HP maximum halved","Speed 0","Death"][S.exhaustion]:"None"}</span></div>
+  </section>
+
+  <section class="card">
+    <h2>Attacks <button class="btn sm" data-a="add" data-k="attacks">Add</button></h2>
+    ${S.attacks.map((a,i)=>`<div class="atk">
+      <input class="in" data-b="attacks.${i}.name" value="${esc(a.name)}" aria-label="Attack name" style="font-weight:700">
+      <input class="in" data-b="attacks.${i}.bonus" value="${esc(a.bonus)}" aria-label="To hit" style="text-align:center">
+      <input class="in" data-b="attacks.${i}.dmg" value="${esc(a.dmg)}" aria-label="Damage">
+      <button class="x" data-a="del" data-k="attacks" data-i="${i}" aria-label="Remove">×</button>
+      <input class="in bare note small muted" data-b="attacks.${i}.note" value="${esc(a.note)}" placeholder="Notes">
+    </div>`).join("")}
+  </section>
+
+  <section class="card">
+    <h2>Features <button class="btn sm" data-a="add" data-k="features">Add</button></h2>
+    ${S.features.map((f,i)=>`<div class="feat">
+      <div class="hd">
+        <input class="in bare" data-b="features.${i}.name" value="${esc(f.name)}" style="flex:1">
+        ${f.max>0?`<div class="pips">${Array.from({length:f.max},(_,j)=>`<button class="pip ${j<f.max-f.used?"":"used"}" data-a="featUse" data-i="${i}" data-j="${j}" aria-label="Use"></button>`).join("")}</div>`:""}
+        <select class="in small" data-b="features.${i}.reset" style="width:auto" aria-label="Recharge">
+          ${["none","short","long"].map(r=>`<option value="${r}" ${f.reset===r?"selected":""}>${r==="none"?"Passive":r==="short"?"Short rest":"Long rest"}</option>`).join("")}
+        </select>
+        ${f.reset!=="none"?`<input class="in num" type="number" min="0" data-b="features.${i}.max" value="${f.max}" aria-label="Uses" style="width:56px">`:""}
+        <button class="x" data-a="del" data-k="features" data-i="${i}" aria-label="Remove">×</button>
+      </div>
+      <textarea class="in bare small muted" data-b="features.${i}.text" rows="2" style="min-height:0">${esc(f.text)}</textarea>
+    </div>`).join("")}
+  </section>
+  </div>`;
+}
+
+/* ---------- spells ---------- */
+function casterStats(src){const a=S.sources[src].abil;const m=mod(S.abil[a]);return {dc:8+S.prof+m,atk:S.prof+m,a}}
+function renderSpells(){
+  const srcs=Object.keys(S.sources);
+  const lvls=[1,2,3,4,5,6,7,8,9].filter(l=>S.slots[l].max>0);
+  const filtered=S.spells.map((s,i)=>({...s,i})).filter(s=>spellFilter==="all"||(spellFilter==="ready"?isReady(s):s.src===spellFilter));
+  const byLvl={}; filtered.forEach(s=>{(byLvl[s.lvl]??=[]).push(s)});
+  return `
+  <div class="casters">${srcs.map(k=>{const c=casterStats(k);return `<div class="caster src-${k}"><b>${esc(S.sources[k].label)}</b>
+    <div class="nums"><div><strong>${c.dc}</strong>Save DC</div><div><strong>${sgn(c.atk)}</strong>Attack</div><div><strong>${c.a.toUpperCase()}</strong>Ability</div></div></div>`}).join("")}</div>
+  <div class="grid">
+    <section class="card">
+      <h2>Spell slots</h2>
+      ${lvls.map(l=>{const s=S.slots[l];return `<div class="slotrow"><span class="lv">${ORD[l]}</span>
+        <div class="pips" style="flex:1">${Array.from({length:s.max},(_,j)=>`<button class="pip ${j<s.max-s.used?"":"used"}" data-a="slot" data-k="${l}" data-j="${j}" aria-label="${ORD[l]} slot"></button>`).join("")}</div>
+        <span class="muted small">${s.max-s.used}/${s.max}</span></div>`}).join("")}
+      <div class="slotrow"><span class="lv" style="color:var(--violet)">Pact</span>
+        <div class="pips" style="flex:1">${Array.from({length:S.pact.max},(_,j)=>`<button class="pip pact ${j<S.pact.max-S.pact.used?"":"used"}" data-a="pactSlot" data-j="${j}" aria-label="Pact slot"></button>`).join("")}</div>
+        <span class="muted small">${ORD[S.pact.level]} level · short rest</span></div>
+      <details style="margin-top:10px"><summary class="muted small">Change slot totals</summary>
+        <div class="row small" style="margin-top:8px">${[1,2,3,4,5,6,7,8,9].map(l=>`<label class="muted">${ORD[l]} <input class="in num" type="number" min="0" style="width:56px" data-b="slots.${l}.max" value="${S.slots[l].max}"></label>`).join("")}</div>
+        <div class="row small" style="margin-top:8px"><label class="muted">Pact slots <input class="in num" type="number" min="0" style="width:56px" data-b="pact.max" value="${S.pact.max}"></label>
+        <label class="muted">Pact slot level <input class="in num" type="number" min="1" max="5" style="width:56px" data-b="pact.level" value="${S.pact.level}"></label></div>
+      </details>
+    </section>
+  </div>
+  <section class="card" style="margin-top:16px">
+    <h2>Spells <button class="btn sm" data-a="addSpell">Add spell</button></h2>
+    <div class="row prepbar" style="margin-bottom:10px"><span>Wizard spells prepared <strong class="${prepCount()>prepLimit()?"neg":""}" style="font-family:var(--display);font-size:22px">${prepCount()} / ${prepLimit()}</strong></span>
+      <label class="muted small">Wizard level <input class="in num" type="number" min="1" max="20" data-b="wizLevel" value="${S.wizLevel}" style="width:56px"></label>
+      <span class="muted small">Int modifier + wizard level. Change them after a long rest.</span></div>
+    ${(()=>{const f=S.features.find(f=>f.name==="Cantrip Formulas");const used=f&&f.used>=f.max;return `<div class="row" style="margin-bottom:12px"><button class="btn ${used?"":"pri"}" data-a="cantripFormula" ${used?"disabled style=\"opacity:.55\"":""}>Cantrip Formulas: swap a wizard cantrip</button><span class="muted small">${used?"Used. Available again after your next long rest.":"Available once per long rest."}</span></div>`})()}
+    <div class="chips" style="margin-bottom:6px">
+      ${[["all","All"],["ready","Ready to cast"],...srcs.map(k=>[k,S.sources[k].label])].map(([k,l])=>`<button class="chip ${spellFilter===k?"on":""}" style="${spellFilter===k?"background:var(--hexSoft);color:var(--hex);border-color:var(--hex)":""}" data-a="spellFilter" data-k="${k}">${esc(l)}</button>`).join("")}
+    </div>
+    ${Object.keys(byLvl).sort((a,b)=>a-b).map(l=>`<div class="lvlhd">${l==0?"Cantrips":ORD[l]+" level"}</div>
+      ${byLvl[l].map(s=>`<div class="sp src-${s.src} ${isReady(s)?"":"unprep"}" style="padding-left:10px">
+        <div class="nm"><input class="in bare" data-b="spells.${s.i}.name" value="${esc(s.name)}"></div>
+        ${s.src==="wizard"&&s.lvl>0?`<button class="tag prep ${s.prep?"on":""}" data-a="prep" data-i="${s.i}" aria-pressed="${s.prep}">${s.prep?"Prepared":"Prepare"}</button>`:""}
+        <button class="tag ${s.r?"on":""}" data-a="spTag" data-k="r" data-i="${s.i}" title="Ritual">R</button>
+        <button class="tag ${s.c?"on":""}" data-a="spTag" data-k="c" data-i="${s.i}" title="Concentration">C</button>
+        ${s.lvl===0?`<span style="width:58px"></span>`:isReady(s)?`<button class="btn sm pri" data-a="cast" data-i="${s.i}">Cast</button>`:s.r?`<button class="btn sm" data-a="cast" data-i="${s.i}">Ritual</button>`:`<span style="width:58px"></span>`}
+        <button class="x" data-a="del" data-k="spells" data-i="${s.i}" aria-label="Remove">×</button>
+      </div>`).join("")}`).join("")}
+    <p class="muted small" style="margin-top:12px">Warlock and sorcerer spells are always ready. Unprepared wizard rituals can still be cast as rituals. R marks a ritual, C marks concentration. Casting a C spell sets your concentration. Pact slots can power any spell you know.</p>
+  </section>`;
+}
+
+/* ---------- character ---------- */
+function renderCharacter(){
+  const pp=10+mod(S.abil.wis)+(S.skills.perception?S.prof*S.skills.perception:0);
+  return `<div class="grid">
+  <section class="card" style="grid-column:1/-1">
+    <h2>Abilities <span class="row small muted" style="font-family:var(--body);font-weight:400">Proficiency <input class="in num" type="number" data-b="prof" value="${S.prof}" style="width:56px"></span></h2>
+    <div class="abils">${ABILS.map(([k,l])=>`<div class="ab"><div class="k">${l}</div><div class="m">${sgn(mod(S.abil[k]))}</div><input type="number" data-b="abil.${k}" value="${S.abil[k]}" aria-label="${l} score"></div>`).join("")}</div>
+  </section>
+  <section class="card">
+    <h2>Saving throws</h2>
+    <div class="list">${ABILS.map(([k,l])=>{const p=!!S.saves[k];return `<div class="li"><button class="dot ${p?"on":""}" data-a="save" data-k="${k}" aria-label="Toggle proficiency"></button><span class="n">${l}</span><span class="v">${sgn(mod(S.abil[k])+(p?S.prof:0))}</span></div>`}).join("")}</div>
+    <h3>Passive perception: ${pp}</h3>
+  </section>
+  <section class="card">
+    <h2>Skills</h2>
+    <div class="list">${SKILLS.map(([k,l,a])=>{const p=S.skills[k]||0;return `<div class="li"><button class="dot ${p===1?"on":p===2?"ex":""}" data-a="skill" data-k="${k}" aria-label="Cycle proficiency"></button><span class="n">${l} <span class="muted small">${a.toUpperCase()}</span></span><span class="v">${sgn(mod(S.abil[a])+S.prof*p)}</span></div>`}).join("")}</div>
+    <p class="muted small">Tap a circle: proficient, then expertise, then none.</p>
+  </section>
+  <section class="card">
+    <h2>Identity</h2>
+    ${[["name","Name"],["race","Race"],["classes","Class & level"],["background","Background"],["alignment","Alignment"]].map(([k,l])=>`<label class="small muted">${l}<input class="in" data-b="${k}" value="${esc(S[k])}" style="margin:2px 0 8px;color:var(--ink)"></label>`).join("")}
+    <div class="row small muted"><label>Speed <input class="in num" type="number" data-b="speed" value="${S.speed}"></label><label>Extra initiative <input class="in num" type="number" data-b="initMisc" value="${S.initMisc}"></label></div>
+    <h3>Hit dice</h3>
+    ${S.hd.map((h,i)=>`<div class="row small muted" style="margin-bottom:6px"><label>Die d<input class="in num" type="number" data-b="hd.${i}.die" value="${h.die}" style="width:56px"></label><label>Count <input class="in num" type="number" data-b="hd.${i}.total" value="${h.total}" style="width:56px"></label></div>`).join("")}
+  </section>
+  <section class="card">
+    <h2>Proficiencies &amp; languages</h2>
+    <textarea class="in" data-b="profText" rows="5">${esc(S.profText)}</textarea>
+  </section>
+  </div>`;
+}
+
+/* ---------- inventory ---------- */
+function renderInventory(){
+  const att=S.items.filter(i=>i.attune).length;
+  return `<div class="grid">
+  <section class="card" style="grid-column:1/-1">
+    <h2>Coins</h2>
+    <div class="coins">${["cp","sp","ep","gp","pp"].map(k=>`<div class="coin ${k}"><div class="k">${k.toUpperCase()}</div><input type="number" inputmode="numeric" data-b="coins.${k}" value="${S.coins[k]}" aria-label="${k}"></div>`).join("")}</div>
+    <div class="row" style="margin-top:10px"><input id="gpAmt" class="in num" type="number" placeholder="0" aria-label="Gold amount"><button class="btn pri" data-a="gp" data-k="1">Add gold</button><button class="btn" data-a="gp" data-k="-1">Spend gold</button></div>
+  </section>
+  <section class="card" style="grid-column:1/-1">
+    <h2>Items <span class="row"><span class="muted small" style="font-family:var(--body);font-weight:400">Attuned ${att}/3</span><button class="btn sm" data-a="add" data-k="items">Add item</button></span></h2>
+    ${S.items.length?S.items.map((it,i)=>`<div class="row" style="flex-wrap:nowrap;margin-bottom:6px">
+      <input class="in num" type="number" min="0" data-b="items.${i}.qty" value="${it.qty}" style="width:60px" aria-label="Quantity">
+      <input class="in" data-b="items.${i}.name" value="${esc(it.name)}" style="flex:2;font-weight:600" aria-label="Item">
+      <input class="in" data-b="items.${i}.note" value="${esc(it.note)}" placeholder="Notes" style="flex:3" aria-label="Notes">
+      <button class="tag ${it.attune?"on":""}" data-a="attune" data-i="${i}" title="Attuned">Attuned</button>
+      <button class="x" data-a="del" data-k="items" data-i="${i}" aria-label="Remove">×</button></div>`).join(""):`<p class="muted">Nothing carried yet. Add your first item.</p>`}
+  </section></div>`;
+}
+
+/* ---------- town ---------- */
+function townNet(){const T=S.town;return T.income.reduce((a,x)=>a+Number(x.amt||0),0)-T.expenses.reduce((a,x)=>a+Number(x.amt||0),0)}
+function moneyRows(kind){return S.town[kind].map((x,i)=>`<div class="money">
+  <input class="in" data-b="town.${kind}.${i}.name" value="${esc(x.name)}" aria-label="Name">
+  <input class="in" type="number" data-b="town.${kind}.${i}.amt" value="${x.amt}" style="text-align:right" aria-label="Amount">
+  <button class="x" data-a="del" data-k="town.${kind}" data-i="${i}" aria-label="Remove">×</button></div>`).join("")}
+function renderTown(){
+  const T=S.town, net=townNet();
+  return `<div class="grid">
+  <section class="card">
+    <h2><input class="in bare" data-b="town.name" value="${esc(T.name)}" style="font-family:var(--display);font-size:23px;font-weight:600"><span class="muted small" style="font-family:var(--body);font-weight:400;white-space:nowrap">Turn ${T.turn}</span></h2>
+    <div class="muted small">Treasury</div>
+    <div class="treasury">${fmt(T.treasury)} <span style="font-size:24px">gp</span></div>
+    <div class="row" style="margin:12px 0 4px">
+      <span class="muted">Per turn</span><span class="net ${net>=0?"pos":"neg"}">${net>=0?"+":"−"}${fmt(Math.abs(net))} gp</span>
+    </div>
+    <div class="row" style="margin-top:10px"><button class="btn gold" data-a="endTurn">End turn</button><button class="btn" data-a="townTx">Add transaction</button></div>
+    <details style="margin-top:12px"><summary class="muted small">Set treasury directly</summary><input class="in" type="number" data-b="town.treasury" value="${T.treasury}" style="margin-top:6px"></details>
+  </section>
+  <section class="card">
+    <h2>Income <button class="btn sm" data-a="add" data-k="town.income">Add</button></h2>
+    ${moneyRows("income")||`<p class="muted">No income yet.</p>`}
+    <h2 style="margin-top:16px">Expenses <button class="btn sm" data-a="add" data-k="town.expenses">Add</button></h2>
+    ${moneyRows("expenses")||`<p class="muted">No expenses yet.</p>`}
+  </section>
+  <section class="card">
+    <h2>Town stats <button class="btn sm" data-a="add" data-k="town.stats">Add stat</button></h2>
+    ${T.stats.length?`<div class="stats">${T.stats.map((s,i)=>`<div class="stat">
+      <div class="row" style="flex-wrap:nowrap"><input class="in bare small" data-b="town.stats.${i}.name" value="${esc(s.name)}"><button class="x" data-a="del" data-k="town.stats" data-i="${i}" aria-label="Remove">×</button></div>
+      <div class="row"><button class="btn sm" data-a="statAdj" data-i="${i}" data-k="-1" aria-label="Decrease">−</button><span class="val">${fmt(s.val)}</span><button class="btn sm" data-a="statAdj" data-i="${i}" data-k="1" aria-label="Increase">+</button></div>
+    </div>`).join("")}</div>`:`<p class="muted">Track whatever your DM uses: population, morale, defense, reputation. Add your first stat.</p>`}
+  </section>
+  <section class="card">
+    <h2>Buildings &amp; projects <button class="btn sm" data-a="add" data-k="town.projects">Add</button></h2>
+    ${T.projects.length?T.projects.map((p,i)=>`<div class="proj">
+      <input class="in" data-b="town.projects.${i}.name" value="${esc(p.name)}" aria-label="Project" style="font-weight:600">
+      <input class="in" type="number" data-b="town.projects.${i}.cost" value="${p.cost}" placeholder="Cost" aria-label="Cost gp" style="text-align:right">
+      <select class="in stsel" data-b="town.projects.${i}.status">${["Planned","Building","Done"].map(o=>`<option ${p.status===o?"selected":""}>${o}</option>`).join("")}</select>
+      <button class="x" data-a="del" data-k="town.projects" data-i="${i}" aria-label="Remove">×</button>
+      ${p.status==="Planned"&&Number(p.cost)>0?`<button class="btn sm" style="grid-column:1/-1;justify-self:start" data-a="fund" data-i="${i}">Pay ${fmt(p.cost)} gp from treasury and start</button>`:""}
+    </div>`).join(""):`<p class="muted">Add a building, upgrade or project the town is working on.</p>`}
+  </section>
+  <section class="card" style="grid-column:1/-1">
+    <h2>Chronicle</h2>
+    ${T.log.length?`<div class="log">${T.log.slice().reverse().map(l=>`<div><span class="t">Turn ${l.turn}</span><span style="flex:1">${esc(l.text)}</span>${l.amt?`<span class="${l.amt>=0?"pos":"neg"}">${l.amt>=0?"+":"−"}${fmt(Math.abs(l.amt))}</span>`:""}</div>`).join("")}</div>`:`<p class="muted">Turns and transactions show up here.</p>`}
+    <div class="row" style="margin-top:10px"><input id="logNote" class="in" placeholder="Note an event, e.g. “Bandit raid on the east farms”" style="flex:1"><button class="btn" data-a="logNote">Add to chronicle</button></div>
+  </section>
+  </div>`;
+}
+
+/* ---------- notes ---------- */
+function renderNotes(){
+  return `<div class="grid"><section class="card" style="grid-column:1/-1"><h2>Session notes</h2>
+  <textarea class="in" data-b="notes" style="min-height:50vh" placeholder="NPCs, quests, loot, things your DM said that might matter later…">${esc(S.notes)}</textarea></section>
+  </div>`;
+}
+
+/* ---------- render ---------- */
+function render(){
+  renderHeader();
+  const y=window.scrollY;
+  const m=document.getElementById("main");
+  m.innerHTML={combat:renderCombat,spells:renderSpells,character:renderCharacter,inventory:renderInventory,town:renderTown,notes:renderNotes,sync:renderSync}[tab]();
+  window.scrollTo(0,y);
+}
+
+/* ---------- modal ---------- */
+function modal(html){document.getElementById("modalRoot").innerHTML=`<div class="scrim" data-a="closeModal"><div class="modal" role="dialog" aria-modal="true">${html}<button class="btn ghost" data-a="closeModal" style="text-align:center">Cancel</button></div></div>`}
+function closeModal(){document.getElementById("modalRoot").innerHTML=""}
+
+/* ---------- actions ---------- */
+function doRest(kind){
+  if(kind==="short"){
+    S.pact.used=0;
+    S.features.forEach(f=>{if(f.reset==="short")f.used=0});
+    const dice=S.hd.map((h,i)=>({...h,i})).filter(h=>h.total-h.used>0);
+    modal(`<h2>Short rest</h2><p class="muted">Pact slots and short-rest features are back. Spend hit dice to heal (adds your Con modifier ${sgn(mod(S.abil.con))}).</p>
+      <p><strong>HP ${S.hp.cur} / ${S.hp.max}</strong></p>
+      ${dice.length?dice.map(h=>`<button class="btn pri" data-a="spendHD" data-i="${h.i}">Roll a d${h.die} (${h.total-h.used} left)</button>`).join(""):`<p class="muted">No hit dice left.</p>`}
+      <button class="btn" data-a="closeModal" style="text-align:center">Done</button>`);
+  } else {
+    S.hp.cur=S.hp.max; S.hp.temp=0; S.death={s:0,f:0}; S.pact.used=0;
+    Object.values(S.slots).forEach(s=>s.used=0);
+    S.features.forEach(f=>{if(f.reset!=="none")f.used=0});
+    let regain=Math.max(1,Math.floor(totalLevel()/2));
+    S.hd.slice().sort((a,b)=>b.die-a.die).forEach(h=>{const r=Math.min(h.used,regain);h.used-=r;regain-=r});
+    if(S.exhaustion>0)S.exhaustion--;
+    S.conc=""; S.shield=false;
+    toast("Long rest done: HP, slots and features restored. You can change prepared spells and use Cantrip Formulas now.",4500);
+  }
+  save(); render();
+}
+
+function castModal(i){
+  const s=S.spells[i];
+  const opts=[];
+  if(!isReady(s)){ modal(`<h2>Cast ${esc(s.name)}</h2><p class="muted">Not prepared. Wizards can still cast ritual spells from their spellbook.</p>${s.r?`<button class="btn" data-a="castAt" data-i="${i}" data-k="ritual">As a ritual (+10 minutes, no slot)</button>`:""}`); return; }
+  for(let l=s.lvl;l<=9;l++){const sl=S.slots[l];if(sl.max-sl.used>0)opts.push(`<button class="btn" data-a="castAt" data-i="${i}" data-k="${l}">${ORD[l]}-level slot <span class="muted">(${sl.max-sl.used} left)</span></button>`)}
+  if(S.pact.level>=s.lvl&&S.pact.max-S.pact.used>0)opts.push(`<button class="btn" data-a="castAt" data-i="${i}" data-k="pact" style="border-color:var(--violet)">Pact slot, ${ORD[S.pact.level]} level <span class="muted">(${S.pact.max-S.pact.used} left)</span></button>`);
+  if(s.r)opts.push(`<button class="btn" data-a="castAt" data-i="${i}" data-k="ritual">As a ritual (+10 minutes, no slot)</button>`);
+  modal(`<h2>Cast ${esc(s.name)}</h2>${s.c?`<p class="muted small">Concentration${S.conc?` – this ends ${esc(S.conc)}`:""}</p>`:""}${opts.length?opts.join(""):`<p>No slots of ${ORD[s.lvl]} level or higher left.</p>`}`);
+}
+
+function addTownLog(text,amt){S.town.log.push({turn:S.town.turn,text,amt:amt||0}); if(S.town.log.length>300)S.town.log.shift()}
+
+document.addEventListener("click",e=>{
+  const el=e.target.closest("[data-a]"); if(!el) return;
+  const a=el.dataset.a, k=el.dataset.k, i=Number(el.dataset.i), j=Number(el.dataset.j);
+  if(a==="closeModal"){ if(e.target!==el) return; closeModal(); render(); return; }
+  switch(a){
+    case "tab": tab=k; render(); window.scrollTo(0,0); return;
+    case "shortRest": doRest("short"); return;
+    case "longRest": modal(`<h2>Take a long rest?</h2><p class="muted">Restores HP, all spell slots and features, half your hit dice, and ends concentration.</p><button class="btn pri" data-a="confirmLong" style="text-align:center">Take long rest</button>`); return;
+    case "confirmLong": closeModal(); doRest("long"); return;
+    case "spendHD": { const h=S.hd[i]; if(h.total-h.used<=0) return; const r=roll(h.die), heal=Math.max(0,r+mod(S.abil.con)); h.used++; S.hp.cur=Math.min(S.hp.max,S.hp.cur+heal); save(); doRest("short"); toast(`Rolled ${r} on the d${h.die}: healed ${heal}.`); return; }
+    case "hp": {
+      const inp=document.getElementById("hpAmt"); const n=Math.max(0,Math.floor(Number(inp.value)||0)); if(!n&&k!=="temp"){inp.focus();return;}
+      if(k==="dmg"){ let d=n; const t=Math.min(S.hp.temp,d); S.hp.temp-=t; d-=t; S.hp.cur=Math.max(0,S.hp.cur-d);
+        if(S.conc) toast(`Concentration check: Con save DC ${Math.max(10,Math.floor(n/2))} to keep ${S.conc}.`,4500);
+        if(S.hp.cur===0) toast("You’re down. Death saves are showing.",3500); }
+      else if(k==="heal"){ if(S.hp.cur===0)S.death={s:0,f:0}; S.hp.cur=Math.min(S.hp.max,S.hp.cur+n); }
+      else S.hp.temp=n;
+      save(); render(); return; }
+    case "death": { const cur=S.death[k]; S.death[k]=cur>i?i:i+1; save(); render(); return; }
+    case "toggleShield": S.shield=!S.shield; save(); render(); return;
+    case "dropConc": S.conc=""; save(); render(); return;
+    case "cond": { const c=S.conditions; const ix=c.indexOf(k); ix>=0?c.splice(ix,1):c.push(k); save(); render(); return; }
+    case "exh": S.exhaustion=S.exhaustion===i?i-1:i; save(); render(); return;
+    case "featUse": { const f=S.features[i]; const avail=f.max-f.used; f.used=j<avail?f.used+1:f.used-1; f.used=Math.max(0,Math.min(f.max,f.used)); save(); render(); return; }
+    case "slot": { const s=S.slots[k]; const avail=s.max-s.used; s.used=j<avail?s.used+1:s.used-1; s.used=Math.max(0,Math.min(s.max,s.used)); save(); render(); return; }
+    case "pactSlot": { const s=S.pact; const avail=s.max-s.used; s.used=j<avail?s.used+1:s.used-1; s.used=Math.max(0,Math.min(s.max,s.used)); save(); render(); return; }
+    case "spellFilter": spellFilter=k; render(); return;
+    case "spTag": S.spells[i][k]=!S.spells[i][k]; save(); render(); return;
+    case "resync": if(!navigator.onLine){ toast("Still offline. Your changes are safe on this tablet."); return; } sync(true); return;
+    case "saveCfg": { const u=document.getElementById("cfgUrl").value.trim().replace(/\/+$/,""), k=document.getElementById("cfgKey").value.trim(); if(!u||!k){toast("Paste both the project URL and the key.");return;}
+      CFG.url=u; CFG.key=k; try{localStorage.setItem("dnd-sync-config",JSON.stringify({url:u,key:k}))}catch(e){} sb=null; initClient(); render(); return; }
+    case "clearCfg": try{localStorage.removeItem("dnd-sync-config")}catch(e){} location.reload(); return;
+    case "signIn": signIn(); return;
+    case "signOut": modal(`<h2>Sign out?</h2><p class="muted">Your sheet stays on this tablet. Changes won’t sync until you sign in again.</p><button class="btn dmg" data-a="confirmSignOut" style="text-align:center">Sign out</button>`); return;
+    case "confirmSignOut": closeModal(); if(sb) sb.auth.signOut().catch(()=>{}); session=null; try{localStorage.removeItem("dnd-sync-base");localStorage.removeItem("dnd-sync-rev")}catch(e){} lastRev=null; render(); return;
+    case "install": if(installEvt){ installEvt.prompt(); installEvt.userChoice.finally(()=>{installEvt=null;render();}); } return;
+    case "cantripFormula": { const f=cfFeature(); if(f.used>=f.max){toast("Cantrip Formulas is used. It comes back after a long rest.");return;}
+      const mine=S.spells.map((s,ix)=>({...s,ix})).filter(s=>s.src==="wizard"&&s.lvl===0);
+      const known=new Set(S.spells.map(s=>s.name.toLowerCase()));
+      const opts=WIZ_CANTRIPS.filter(n=>!known.has(n.toLowerCase()));
+      if(!mine.length){toast("You have no wizard cantrips to swap.");return;}
+      modal(`<h2>Cantrip Formulas</h2><p class="muted small">Replace one wizard cantrip you know with another from the wizard list.</p>
+        <label class="small muted">Forget<select class="in" id="cfOld" style="margin:2px 0 10px">${mine.map(s=>`<option value="${s.ix}">${esc(s.name)}</option>`).join("")}</select></label>
+        <label class="small muted">Learn<select class="in" id="cfNew" style="margin:2px 0 6px">${opts.map(n=>`<option>${esc(n)}</option>`).join("")}<option value="__other">Other (type it in)</option></select></label>
+        <input class="in" id="cfOther" placeholder="Cantrip name, if Other" style="margin-bottom:6px">
+        <button class="btn pri" data-a="doSwap" style="text-align:center">Swap cantrip</button>`); return; }
+    case "doSwap": { const ix=Number(document.getElementById("cfOld").value); let n=document.getElementById("cfNew").value; if(n==="__other") n=document.getElementById("cfOther").value.trim(); if(!n) return;
+      const old=S.spells[ix].name; S.spells[ix].name=n; S.spells[ix].c=false; S.spells[ix].r=false; cfFeature().used=1;
+      closeModal(); save(); render(); toast(`Swapped ${old} for ${n}.`,3500); return; }
+    case "prep": { const s=S.spells[i]; if(!s.prep&&prepCount()>=prepLimit()){ toast(`You can prepare ${prepLimit()} wizard spells. Unprepare one first.`); return; } s.prep=!s.prep; save(); render(); return; }
+    case "cast": castModal(i); return;
+    case "castAt": { const s=S.spells[i];
+      if(k==="pact") S.pact.used++; else if(k!=="ritual") S.slots[k].used++;
+      if(s.c) S.conc=s.name;
+      closeModal(); save(); render(); toast(`Cast ${s.name}${k==="ritual"?" as a ritual":k==="pact"?" with a pact slot":" at "+ORD[k]+" level"}.`); return; }
+    case "addSpell": modal(`<h2>Add spell</h2>
+      <label class="small muted">Name<input class="in" id="nsName" style="margin:2px 0 8px"></label>
+      <div class="row"><label class="small muted">Level <input class="in num" id="nsLvl" type="number" min="0" max="9" value="1"></label>
+      <label class="small muted">From <select class="in" id="nsSrc" style="width:auto">${Object.keys(S.sources).map(k=>`<option value="${k}">${esc(S.sources[k].label)}</option>`).join("")}</select></label></div>
+      <button class="btn pri" data-a="saveSpell" style="text-align:center">Add spell</button>`); setTimeout(()=>document.getElementById("nsName")?.focus(),50); return;
+    case "saveSpell": { const n=document.getElementById("nsName").value.trim(); if(!n) return; S.spells.push(sp(n,Math.max(0,Math.min(9,Number(document.getElementById("nsLvl").value)||0)),document.getElementById("nsSrc").value)); closeModal(); save(); render(); return; }
+    case "save": S.saves[k]=S.saves[k]?0:1; save(); render(); return;
+    case "skill": S.skills[k]=((S.skills[k]||0)+1)%3; save(); render(); return;
+    case "attune": S.items[i].attune=!S.items[i].attune; save(); render(); return;
+    case "gp": { const inp=document.getElementById("gpAmt"); const n=Math.floor(Number(inp.value)||0); if(!n){inp.focus();return;} S.coins.gp=Number(S.coins.gp)+n*Number(k); save(); render(); toast(`${k==="1"?"Added":"Spent"} ${fmt(n)} gp.`); return; }
+    case "add": {
+      const blank={attacks:{name:"New attack",bonus:"+0",dmg:"",note:""},features:{name:"New feature",max:0,used:0,reset:"none",text:""},items:{name:"",qty:1,note:"",attune:false},
+        "town.income":{name:"New income",amt:0},"town.expenses":{name:"New expense",amt:0},"town.stats":{name:"New stat",val:0},"town.projects":{name:"",cost:0,status:"Planned"}}[k];
+      getP(k).push(clone(blank)); save(); render(); return; }
+    case "del": { const arr=getP(k); const label=arr[i]?.name||"this"; modal(`<h2>Remove ${esc(label)}?</h2><button class="btn dmg" data-a="confirmDel" data-k="${k}" data-i="${i}" style="text-align:center">Remove</button>`); return; }
+    case "confirmDel": getP(k).splice(i,1); closeModal(); save(); render(); return;
+    case "endTurn": { const net=townNet(); const T=S.town;
+      modal(`<h2>End turn ${T.turn}?</h2><p>Income ${fmt(T.income.reduce((a,x)=>a+Number(x.amt||0),0))} gp, expenses ${fmt(T.expenses.reduce((a,x)=>a+Number(x.amt||0),0))} gp.</p>
+      <p>Treasury goes from <strong>${fmt(T.treasury)}</strong> to <strong class="${net>=0?"pos":"neg"}">${fmt(T.treasury+net)} gp</strong>.</p>
+      <button class="btn gold" data-a="confirmTurn" style="text-align:center">End turn</button>`); return; }
+    case "confirmTurn": { const net=townNet(); S.town.treasury=Number(S.town.treasury)+net; addTownLog("Turn ended: income collected, expenses paid",net); S.town.turn++; closeModal(); save(); render(); toast(`Turn ${S.town.turn} begins.`); return; }
+    case "townTx": modal(`<h2>Add transaction</h2>
+      <label class="small muted">What happened<input class="in" id="txNote" placeholder="e.g. Sold surplus grain" style="margin:2px 0 8px"></label>
+      <label class="small muted">Amount (gp)<input class="in" id="txAmt" type="number" style="margin:2px 0 8px"></label>
+      <div class="row"><button class="btn pri" data-a="saveTx" data-k="1" style="flex:1;text-align:center">Add to treasury</button><button class="btn dmg" data-a="saveTx" data-k="-1" style="flex:1;text-align:center">Take from treasury</button></div>`); return;
+    case "saveTx": { const n=Math.abs(Math.floor(Number(document.getElementById("txAmt").value)||0)); if(!n) return; const amt=n*Number(k); S.town.treasury=Number(S.town.treasury)+amt; addTownLog(document.getElementById("txNote").value.trim()||(amt>0?"Deposit":"Withdrawal"),amt); closeModal(); save(); render(); return; }
+    case "statAdj": S.town.stats[i].val=Number(S.town.stats[i].val||0)+Number(k); save(); render(); return;
+    case "fund": { const p=S.town.projects[i]; const c=Number(p.cost)||0; S.town.treasury-=c; p.status="Building"; addTownLog(`Started ${p.name||"a project"}`,-c); save(); render(); return; }
+    case "logNote": { const inp=document.getElementById("logNote"); const t=inp.value.trim(); if(!t){inp.focus();return;} addTownLog(t,0); save(); render(); return; }
+    case "export": exportBackup(); return;
+    case "reset": modal(`<h2>Reset everything?</h2><p class="muted">This replaces all your changes with the original sheet, including the town. Save a backup first if you might want them.</p><button class="btn dmg" data-a="confirmReset" style="text-align:center">Reset</button>`); return;
+    case "confirmReset": S=clone(DEFAULT); closeModal(); save(); render(); return;
+  }
+});
+
+document.addEventListener("input",e=>{
+  const p=e.target.dataset?.b; if(!p) return;
+  let v=e.target.value; if(e.target.type==="number") v=v===""?0:Number(v);
+  setP(p,v); save(); if(p==="name"||p==="race"||p==="classes") renderHeader();
+});
+document.addEventListener("change",e=>{
+  if(e.target.id==="importFile"){ importBackup(e.target.files[0]); return; }
+  const p=e.target.dataset?.b; if(!p) return;
+  if(p==="conc"||p==="notes"||p==="profText"||p.endsWith(".note")||p.endsWith(".text")||p.endsWith(".name")) { renderHeader(); return; }
+  // clamp used counts after max edits
+  Object.values(S.slots).forEach(s=>{s.max=Math.max(0,s.max|0);s.used=Math.min(s.used,s.max)});
+  S.pact.used=Math.min(S.pact.used,S.pact.max); S.features.forEach(f=>{f.max=Math.max(0,f.max|0);f.used=Math.min(f.used,f.max)});
+  S.hd.forEach(h=>{h.total=Math.max(0,h.total|0);h.used=Math.min(h.used,h.total)});
+  S.hp.cur=Math.min(S.hp.cur,S.hp.max);
+  save(); render();
+});
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&document.getElementById("modalRoot").innerHTML){closeModal();render();} });
+
+function exportBackup(){
+  const data=JSON.stringify(S,null,2), filename=(S.name||"character").replace(/[^\w-]+/g,"_")+"-backup.json";
+  const url=URL.createObjectURL(new Blob([data],{type:"application/json"}));
+  const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000); toast("Backup saved to Downloads.");
+}
+function importBackup(file){
+  if(!file) return; const r=new FileReader();
+  r.onload=()=>{ try{ const o=JSON.parse(r.result); if(!o||!o.abil) throw 0; S=migrate(merge(clone(DEFAULT),o)); save(); render(); toast("Backup loaded."); }catch(e){ toast("That file isn’t a backup from this sheet."); } };
+  r.readAsText(file);
+}
+
+/* ---------- cloud sync (Supabase) ---------- */
+const CFG=Object.assign({url:"",key:""},window.SYNC_CONFIG||{});
+try{const o=JSON.parse(localStorage.getItem("dnd-sync-config")||"null"); if(o&&o.url&&o.key){CFG.url=o.url;CFG.key=o.key;}}catch(e){}
+let sb=null, session=null, syncing=false, syncAgain=false, saveTimer=null, needsRender=false, installEvt=null, authErr="";
+let lastRev=(()=>{try{const v=localStorage.getItem("dnd-sync-rev");return v===null?null:Number(v)}catch(e){return null}})();
+let pendingSync=(()=>{try{return localStorage.getItem("dnd-sync-pending")==="1"}catch(e){return false}})();
+let lastSynced=(()=>{try{return Number(localStorage.getItem("dnd-sync-time"))||0}catch(e){return 0}})();
+let syncErr="";
+const TABLE="character_sheets";
+const OFFLINE_MSG="Offline: changes are saved on this tablet and will sync when you’re back online.";
+const timeout=ms=>new Promise((_,rej)=>setTimeout(()=>rej(new Error("The server took too long to answer")),ms));
+const withTimeout=(p,ms=12000)=>Promise.race([p,timeout(ms)]);
+
+function persistLocal(){ try{localStorage.setItem("dnd-sheet-v1",JSON.stringify(S)); localStorage.setItem("dnd-sync-pending",pendingSync?"1":"0");}catch(e){} }
+function save(){
+  S.updatedAt=Date.now(); pendingSync=true; persistLocal();
+  if(syncing) syncAgain=true;
+  paintSaveState();
+  clearTimeout(saveTimer); saveTimer=setTimeout(()=>sync(),1500);
+}
+function getBase(){try{return JSON.parse(localStorage.getItem("dnd-sync-base")||"null")}catch(e){return null}}
+function setBase(o,rev){lastRev=rev; try{localStorage.setItem("dnd-sync-base",JSON.stringify(o)); localStorage.setItem("dnd-sync-rev",String(rev));}catch(e){}}
+
+/* three-way merge: keeps changes from both sides; on a true clash the newer side wins.
+   Money (treasury, coins) adds both sides' changes together. Chronicle entries are combined. */
+const isObj=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
+const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+const SUM_PATHS=/^(town\.treasury|coins\.(cp|sp|ep|gp|pp))$/;
+function merge3(b,l,r,localNewer,path){
+  if(l===undefined) return clone(r);
+  if(r===undefined) return clone(l);
+  if(same(l,r)) return clone(l);
+  if(isObj(l)&&isObj(r)){
+    const out={};
+    for(const k of new Set([...Object.keys(l),...Object.keys(r)])){
+      out[k]=merge3(isObj(b)?b[k]:undefined,l[k],r[k],localNewer,path?path+"."+k:k);
+    }
+    return out;
+  }
+  if(same(b,l)) return clone(r);
+  if(same(b,r)) return clone(l);
+  if(SUM_PATHS.test(path)&&typeof l==="number"&&typeof r==="number"&&typeof b==="number") return b+(l-b)+(r-b);
+  if(path==="town.log"&&Array.isArray(l)&&Array.isArray(r)){
+    const seen=new Set(r.map(x=>JSON.stringify(x))); const out=clone(r);
+    l.forEach(x=>{const s=JSON.stringify(x); if(!seen.has(s)){seen.add(s); out.push(clone(x));}});
+    return out;
+  }
+  return clone(localNewer?l:r);
+}
+
+function initClient(){
+  if(sb||!CFG.url||!CFG.key||!window.supabase) return;
+  try{
+    sb=supabase.createClient(CFG.url,CFG.key,{auth:{persistSession:true,autoRefreshToken:true,storageKey:"dnd-sync-auth"}});
+    sb.auth.getSession().then(({data})=>{session=data.session; if(tab==="sync") render(); paintSaveState();});
+    sb.auth.onAuthStateChange((ev,s)=>{ session=s; paintSaveState(); if(ev==="SIGNED_IN") setTimeout(()=>sync(),0); if(tab==="sync") render(); });
+  }catch(e){ sb=null; syncErr="The project URL or key looks wrong."; }
+}
+
+async function signIn(){
+  const email=document.getElementById("authEmail").value.trim(), password=document.getElementById("authPass").value;
+  if(!email||!password){ toast("Enter your email and password."); return; }
+  if(!navigator.onLine){ toast("You need internet to sign in the first time."); return; }
+  initClient(); if(!sb){ toast("Sync isn’t set up yet."); return; }
+  authErr="";
+  try{
+    const {data,error}=await withTimeout(sb.auth.signInWithPassword({email,password}));
+    if(error) throw error;
+    session=data.session; toast("Signed in. Syncing…");
+  }catch(e){ authErr=e.message||"Sign-in failed."; }
+  render();
+}
+
+function adopt(merged,snapshot){
+  // keep any edits made while the sync was running
+  if(syncAgain){ S=merge3(snapshot,S,merged,true,""); }
+  else { S=merged; }
+  try{localStorage.setItem("dnd-sheet-v1",JSON.stringify(S))}catch(e){}
+  const a=document.activeElement;
+  if(a&&(a.tagName==="INPUT"||a.tagName==="TEXTAREA"||a.tagName==="SELECT")&&a.closest("main")){ needsRender=true; renderHeader(); }
+  else render();
+}
+
+async function sync(manual){
+  if(!sb||!CFG.url){ paintSaveState(); return; }
+  if(!navigator.onLine){ paintSaveState(); if(manual) toast("Still offline."); return; }
+  if(syncing){ syncAgain=true; return; }
+  let s; try{ s=(await sb.auth.getSession()).data.session; }catch(e){ s=null; }
+  session=s; if(!s){ paintSaveState(); return; }
+  syncing=true; syncAgain=false; syncErr=""; paintSaveState();
+  const uid=s.user.id;
+  try{
+    let done=false;
+    for(let attempt=0;attempt<4&&!done;attempt++){
+      const snapshot=clone(S);
+      const {data:row,error}=await withTimeout(sb.from(TABLE).select("data,rev").eq("user_id",uid).maybeSingle());
+      if(error) throw error;
+      if(!row){
+        const {error:e2}=await withTimeout(sb.from(TABLE).insert({user_id:uid,data:snapshot,rev:1}));
+        if(e2){ if(e2.code==="23505") continue; throw e2; }
+        setBase(snapshot,1); done=true; break;
+      }
+      const remote=migrate(merge(clone(DEFAULT),row.data||{}));
+      const base=getBase();
+      let merged;
+      if(!base||lastRev===null){ merged=(snapshot.updatedAt||0)>(remote.updatedAt||0)?clone(snapshot):remote; }
+      else merged=merge3(base,snapshot,remote,(snapshot.updatedAt||0)>=(remote.updatedAt||0),"");
+      merged.updatedAt=Math.max(snapshot.updatedAt||0,remote.updatedAt||0);
+      if(same(merged,remote)){ setBase(merged,row.rev); adopt(merged,snapshot); done=true; break; }
+      const {data:upd,error:e3}=await withTimeout(sb.from(TABLE).update({data:merged,rev:row.rev+1}).eq("user_id",uid).eq("rev",row.rev).select("rev"));
+      if(e3) throw e3;
+      if(!upd||!upd.length) continue; // the other device saved at the same moment: try again
+      setBase(merged,row.rev+1); adopt(merged,snapshot); done=true;
+    }
+    if(!done) throw new Error("Couldn’t settle changes with the other device. Try again.");
+    pendingSync=syncAgain; persistLocal();
+    lastSynced=Date.now(); try{localStorage.setItem("dnd-sync-time",String(lastSynced))}catch(e){}
+    if(manual) toast("Synced.");
+  }catch(e){
+    syncErr=navigator.onLine?(e.message||"Sync failed."):"";
+    if(manual&&syncErr) toast("Sync failed: "+syncErr,4000);
+  }finally{
+    syncing=false; paintSaveState(); if(tab==="sync"&&!needsRender) render();
+    if(syncAgain){ syncAgain=false; setTimeout(()=>sync(),800); }
+  }
+}
+
+async function check(){
+  if(!sb||!navigator.onLine||document.hidden||syncing) return;
+  let s; try{ s=(await sb.auth.getSession()).data.session; }catch(e){ return; }
+  if(!s) return;
+  if(pendingSync||lastRev===null) return sync();
+  try{ const {data}=await withTimeout(sb.from(TABLE).select("rev").eq("user_id",s.user.id).maybeSingle(),8000); if(data&&data.rev!==lastRev) sync(); }catch(e){}
+}
+
+function syncLabel(){
+  if(!CFG.url||!CFG.key) return {pill:"",text:"Sync isn’t set up. Your sheet is saved on this tablet only."};
+  if(!session) return {pill:"",text:"Signed out. Your sheet is saved on this tablet only."};
+  if(!navigator.onLine) return {pill:"Offline: saving on this tablet",text:OFFLINE_MSG};
+  if(syncing) return {pill:"",text:"Syncing…"};
+  if(syncErr) return {pill:"Not synced: tap to retry",text:"Last sync failed: "+syncErr};
+  if(pendingSync) return {pill:"",text:"Waiting to sync…"};
+  return {pill:"",text:lastSynced?"Synced "+new Date(lastSynced).toLocaleString():"Synced"};
+}
+function paintSaveState(){
+  const L=syncLabel();
+  const el=document.getElementById("saveState"); if(el) el.textContent=L.text;
+  const p=document.getElementById("syncPill"); if(!p) return;
+  p.hidden=!L.pill; p.textContent=L.pill;
+}
+
+function renderSync(){
+  const L=syncLabel();
+  let acct;
+  if(!CFG.url||!CFG.key){
+    acct=`<p class="muted">Paste your Supabase project details. You only do this once per device, or put them in <code>config.js</code> so every device has them.</p>
+      <label class="small muted">Project URL<input class="in" id="cfgUrl" placeholder="https://xxxx.supabase.co" style="margin:2px 0 8px"></label>
+      <label class="small muted">Publishable (anon) key<input class="in" id="cfgKey" style="margin:2px 0 8px"></label>
+      <button class="btn pri" data-a="saveCfg">Save sync settings</button>`;
+  } else if(!session){
+    acct=`<p class="muted">Sign in with the account you made in Supabase.</p>
+      <label class="small muted">Email<input class="in" id="authEmail" type="email" autocomplete="username" style="margin:2px 0 8px"></label>
+      <label class="small muted">Password<input class="in" id="authPass" type="password" autocomplete="current-password" style="margin:2px 0 8px"></label>
+      ${authErr?`<p class="neg small">${esc(authErr)}</p>`:""}
+      <button class="btn pri" data-a="signIn">Sign in</button>`;
+  } else {
+    acct=`<p>Signed in as <strong>${esc(session.user.email||"you")}</strong></p>
+      <div class="row"><button class="btn pri" data-a="resync">Sync now</button><button class="btn" data-a="signOut">Sign out</button></div>`;
+  }
+  return `<div class="grid">
+    <section class="card"><h2>Sync</h2><p class="small" id="saveState">${esc(L.text)}</p>${acct}
+      ${CFG.url?`<details style="margin-top:14px"><summary class="muted small">Project settings</summary><p class="small muted" style="word-break:break-all">${esc(CFG.url)}</p><button class="btn sm" data-a="clearCfg">Use different project settings</button></details>`:""}
+    </section>
+    <section class="card"><h2>Backup</h2>
+      <p class="muted small">A backup file holds your whole sheet and town. Load one here to move data from the claude.ai version.</p>
+      <div class="row"><button class="btn" data-a="export">Save backup file</button><label class="btn">Load backup<input type="file" accept=".json,application/json" id="importFile" hidden></label></div>
+      ${installEvt?`<button class="btn pri" data-a="install" style="margin-top:12px">Install as an app</button>`:""}
+      <button class="btn ghost" data-a="reset" style="margin-top:12px;color:var(--blood)">Reset to original sheet</button>
+    </section></div>`;
+}
+
+window.addEventListener("online",()=>{ toast("Back online. Syncing your changes."); paintSaveState(); sync(); });
+window.addEventListener("offline",()=>{ paintSaveState(); toast("You’re offline. Keep playing: changes are saved on this tablet.",4000); });
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden) check(); });
+document.addEventListener("focusout",()=>{ setTimeout(()=>{ const a=document.activeElement; if(needsRender&&!(a&&a.closest&&a.closest("main")&&/INPUT|TEXTAREA|SELECT/.test(a.tagName))){ needsRender=false; render(); } },0); });
+window.addEventListener("beforeinstallprompt",e=>{ e.preventDefault(); installEvt=e; if(tab==="sync") render(); });
+setInterval(check,20000);
+
+initClient(); render(); paintSaveState(); setTimeout(()=>sync(),300);
+if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+</script>
+</body>
+</html>
