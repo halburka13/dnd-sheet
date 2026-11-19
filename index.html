@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Galesh Nesta – Character</title>
+<title>D&amp;D Character Sheet</title>
 <meta name="theme-color" content="#221E2D">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon-192.png">
@@ -177,10 +177,11 @@ textarea.in{min-height:120px;resize:vertical}
 <body>
 <header class="top">
   <div class="topin">
-    <div class="who"><h1 id="hName"></h1><p id="hSub"></p></div>
+    <div class="who" data-a="chars" role="button" tabindex="0" title="Switch character" style="cursor:pointer"><h1 id="hName"></h1><p id="hSub"></p></div>
     <div class="vitals" id="vitals"></div>
     <button id="syncPill" class="syncpill" data-a="resync" hidden></button>
     <div class="rests">
+      <button class="btn" data-a="chars">Characters</button>
       <button class="btn" data-a="shortRest">Short rest</button>
       <button class="btn" data-a="longRest">Long rest</button>
     </div>
@@ -262,7 +263,7 @@ const DEFAULT={
   }
 };
 
-let S=migrate(load());
+let S=null, T=null;
 let tab="combat";
 let spellFilter="all";
 
@@ -284,21 +285,25 @@ function migrate(o){
     if(!o.features.some(f=>f.name==="Cantrip Formulas")){const ix=o.features.findIndex(f=>f.name==="Arcane Recovery");o.features.splice(ix>=0?ix+1:o.features.length,0,{name:"Cantrip Formulas",max:1,used:0,reset:"long",text:"After a long rest, swap one wizard cantrip you know for another cantrip from the wizard list. Use the swap button on the Spells tab."});}
     o.v=3; o.updatedAt=Date.now();
   }
+  if((o.v||1)<4){
+    if(o.sources&&o.sources.wizard&&o.sources.wizard.prepares===undefined){o.sources.wizard.prepares=true;o.sources.wizard.level=Number(o.wizLevel)||6;}
+    o.v=4;
+  }
   return o;
 }
 const WIZ_CANTRIPS=["Acid Splash","Blade Ward","Booming Blade","Chill Touch","Control Flames","Create Bonfire","Dancing Lights","Fire Bolt","Friends","Frostbite","Green-Flame Blade","Gust","Infestation","Light","Lightning Lure","Mage Hand","Mending","Message","Mind Sliver","Minor Illusion","Mold Earth","Poison Spray","Prestidigitation","Ray of Frost","Shape Water","Shocking Grasp","Sword Burst","Thunderclap","Toll the Dead","True Strike"];
 function cfFeature(){let f=S.features.find(f=>f.name==="Cantrip Formulas");if(!f){f={name:"Cantrip Formulas",max:1,used:0,reset:"long",text:"After a long rest, swap one wizard cantrip you know for another cantrip from the wizard list."};S.features.push(f);}return f}
-function prepLimit(){return Math.max(1,mod(S.abil.int)+Number(S.wizLevel||0))}
-function prepCount(){return S.spells.filter(s=>s.src==="wizard"&&s.lvl>0&&s.prep).length}
-function isReady(s){return s.lvl===0||s.src!=="wizard"||s.prep}
-function load(){ try{const raw=localStorage.getItem("dnd-sheet-v1"); if(raw) return merge(clone(DEFAULT),JSON.parse(raw));}catch(e){} return clone(DEFAULT); }
+function prepLimit(src){const so=S.sources[src];return Math.max(1,mod(S.abil[so.abil]||10)+Number(so.level||0))}
+function prepCount(src){return S.spells.filter(s=>s.src===src&&s.lvl>0&&s.prep).length}
+function isReady(s){return s.lvl===0||!S.sources[s.src]?.prepares||s.prep}
+function hasSpellbook(s){return /wizard/i.test(S.sources[s.src]?.label||"")}
 /* ---------- helpers ---------- */
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const mod=s=>Math.floor((s-10)/2);
 const sgn=n=>(n>=0?"+":"−")+Math.abs(n);
 const fmt=n=>Number(n||0).toLocaleString("en-US");
-function getP(path){return path.split(".").reduce((o,k)=>o?.[k],S)}
-function setP(path,val){const ks=path.split(".");let o=S;for(let i=0;i<ks.length-1;i++)o=o[ks[i]];o[ks.at(-1)]=val}
+function getP(path){if(path.startsWith("town."))return path.slice(5).split(".").reduce((o,k)=>o?.[k],T);return path.split(".").reduce((o,k)=>o?.[k],S)}
+function setP(path,val){let ks=path.split(".");let o=S;if(ks[0]==="town"){o=T;ks=ks.slice(1);}for(let i=0;i<ks.length-1;i++)o=o[ks[i]];o[ks.at(-1)]=val}
 function totalLevel(){return S.hd.reduce((a,h)=>a+Number(h.total||0),0)}
 function acNow(){return Number(S.ac)+(S.shield?5:0)}
 function toast(msg,ms=2600){const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),ms)}
@@ -306,6 +311,11 @@ function roll(d){return 1+Math.floor(Math.random()*d)}
 
 /* ---------- header ---------- */
 function renderHeader(){
+  document.querySelectorAll('.rests [data-a="shortRest"],.rests [data-a="longRest"]').forEach(b=>b.hidden=!S);
+  const tabs0=[["combat","Combat"],["spells","Spells"],["character","Character"],["inventory","Inventory"],["town","Town"],["notes","Notes"],["sync","Sync"]];
+  document.getElementById("tabs").innerHTML=tabs0.map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" data-a="tab" data-k="${k}">${l}</button>`).join("");
+  if(!S){ document.getElementById("hName").textContent="No character"; document.getElementById("hSub").textContent="Tap to pick or start one"; document.getElementById("vitals").innerHTML=""; return; }
+  document.title=(S.name||"Character")+" – Character";
   document.getElementById("hName").textContent=S.name||"Unnamed";
   document.getElementById("hSub").textContent=[S.race,S.classes].filter(Boolean).join(", ");
   const conc=S.conc?`<button class="vit conc" data-a="dropConc" title="Tap to drop concentration"><b>${esc(S.conc)}</b><span>Concentrating · tap to end</span></button>`:"";
@@ -392,7 +402,7 @@ function renderCombat(){
 }
 
 /* ---------- spells ---------- */
-function casterStats(src){const a=S.sources[src].abil;const m=mod(S.abil[a]);return {dc:8+S.prof+m,atk:S.prof+m,a}}
+function casterStats(src){const a=S.sources[src].abil||"int";const m=mod(S.abil[a]);return {dc:8+S.prof+m,atk:S.prof+m,a}}
 function renderSpells(){
   const srcs=Object.keys(S.sources);
   const lvls=[1,2,3,4,5,6,7,8,9].filter(l=>S.slots[l].max>0);
@@ -407,9 +417,9 @@ function renderSpells(){
       ${lvls.map(l=>{const s=S.slots[l];return `<div class="slotrow"><span class="lv">${ORD[l]}</span>
         <div class="pips" style="flex:1">${Array.from({length:s.max},(_,j)=>`<button class="pip ${j<s.max-s.used?"":"used"}" data-a="slot" data-k="${l}" data-j="${j}" aria-label="${ORD[l]} slot"></button>`).join("")}</div>
         <span class="muted small">${s.max-s.used}/${s.max}</span></div>`}).join("")}
-      <div class="slotrow"><span class="lv" style="color:var(--violet)">Pact</span>
+${S.pact.max>0?`      <div class="slotrow"><span class="lv" style="color:var(--violet)">Pact</span>
         <div class="pips" style="flex:1">${Array.from({length:S.pact.max},(_,j)=>`<button class="pip pact ${j<S.pact.max-S.pact.used?"":"used"}" data-a="pactSlot" data-j="${j}" aria-label="Pact slot"></button>`).join("")}</div>
-        <span class="muted small">${ORD[S.pact.level]} level · short rest</span></div>
+        <span class="muted small">${ORD[S.pact.level]} level · short rest</span></div>`:""}
       <details style="margin-top:10px"><summary class="muted small">Change slot totals</summary>
         <div class="row small" style="margin-top:8px">${[1,2,3,4,5,6,7,8,9].map(l=>`<label class="muted">${ORD[l]} <input class="in num" type="number" min="0" style="width:56px" data-b="slots.${l}.max" value="${S.slots[l].max}"></label>`).join("")}</div>
         <div class="row small" style="margin-top:8px"><label class="muted">Pact slots <input class="in num" type="number" min="0" style="width:56px" data-b="pact.max" value="${S.pact.max}"></label>
@@ -419,23 +429,31 @@ function renderSpells(){
   </div>
   <section class="card" style="margin-top:16px">
     <h2>Spells <button class="btn sm" data-a="addSpell">Add spell</button></h2>
-    <div class="row prepbar" style="margin-bottom:10px"><span>Wizard spells prepared <strong class="${prepCount()>prepLimit()?"neg":""}" style="font-family:var(--display);font-size:22px">${prepCount()} / ${prepLimit()}</strong></span>
-      <label class="muted small">Wizard level <input class="in num" type="number" min="1" max="20" data-b="wizLevel" value="${S.wizLevel}" style="width:56px"></label>
-      <span class="muted small">Int modifier + wizard level. Change them after a long rest.</span></div>
-    ${(()=>{const f=S.features.find(f=>f.name==="Cantrip Formulas");const used=f&&f.used>=f.max;return `<div class="row" style="margin-bottom:12px"><button class="btn ${used?"":"pri"}" data-a="cantripFormula" ${used?"disabled style=\"opacity:.55\"":""}>Cantrip Formulas: swap a wizard cantrip</button><span class="muted small">${used?"Used. Available again after your next long rest.":"Available once per long rest."}</span></div>`})()}
+    ${srcs.filter(k=>S.sources[k].prepares).map(k=>`<div class="row prepbar" style="margin-bottom:10px"><span>${esc(S.sources[k].label)} spells prepared <strong class="${prepCount(k)>prepLimit(k)?"neg":""}" style="font-family:var(--display);font-size:22px">${prepCount(k)} / ${prepLimit(k)}</strong></span>
+      <label class="muted small">${esc(S.sources[k].label)} level <input class="in num" type="number" min="1" max="20" data-b="sources.${k}.level" value="${S.sources[k].level||1}" style="width:56px"></label>
+      <span class="muted small">${(S.sources[k].abil||"int").toUpperCase()} modifier + level. Change them after a long rest.</span></div>`).join("")}
+    ${S.spells.some(s=>s.src==="wizard"&&s.lvl===0)?(()=>{const f=S.features.find(f=>f.name==="Cantrip Formulas");if(!f)return "";const used=f.used>=f.max;return `<div class="row" style="margin-bottom:12px"><button class="btn ${used?"":"pri"}" data-a="cantripFormula" ${used?"disabled style=\"opacity:.55\"":""}>Cantrip Formulas: swap a wizard cantrip</button><span class="muted small">${used?"Used. Available again after your next long rest.":"Available once per long rest."}</span></div>`})():""}
+    <details style="margin-bottom:12px"><summary class="muted small">Spellcasting classes</summary>
+      ${srcs.map(k=>{const so=S.sources[k];return `<div class="row" style="margin-top:8px">
+        <input class="in" data-b="sources.${k}.label" value="${esc(so.label)}" style="flex:1;min-width:140px" aria-label="Class name">
+        <select class="in" data-b="sources.${k}.abil" style="width:auto" aria-label="Ability">${["int","wis","cha"].map(a=>`<option value="${a}" ${so.abil===a?"selected":""}>${a.toUpperCase()}</option>`).join("")}</select>
+        <label class="small muted"><input type="checkbox" data-b="sources.${k}.prepares" ${so.prepares?"checked":""}> Prepares spells</label>
+        <button class="x" data-a="srcDel" data-k="${k}" aria-label="Remove class">×</button></div>`}).join("")}
+      <button class="btn sm" data-a="srcAdd" style="margin-top:8px">Add spellcasting class</button>
+    </details>
     <div class="chips" style="margin-bottom:6px">
       ${[["all","All"],["ready","Ready to cast"],...srcs.map(k=>[k,S.sources[k].label])].map(([k,l])=>`<button class="chip ${spellFilter===k?"on":""}" style="${spellFilter===k?"background:var(--hexSoft);color:var(--hex);border-color:var(--hex)":""}" data-a="spellFilter" data-k="${k}">${esc(l)}</button>`).join("")}
     </div>
     ${Object.keys(byLvl).sort((a,b)=>a-b).map(l=>`<div class="lvlhd">${l==0?"Cantrips":ORD[l]+" level"}</div>
       ${byLvl[l].map(s=>`<div class="sp src-${s.src} ${isReady(s)?"":"unprep"}" style="padding-left:10px">
         <div class="nm"><input class="in bare" data-b="spells.${s.i}.name" value="${esc(s.name)}"></div>
-        ${s.src==="wizard"&&s.lvl>0?`<button class="tag prep ${s.prep?"on":""}" data-a="prep" data-i="${s.i}" aria-pressed="${s.prep}">${s.prep?"Prepared":"Prepare"}</button>`:""}
+        ${S.sources[s.src]?.prepares&&s.lvl>0?`<button class="tag prep ${s.prep?"on":""}" data-a="prep" data-i="${s.i}" aria-pressed="${s.prep}">${s.prep?"Prepared":"Prepare"}</button>`:""}
         <button class="tag ${s.r?"on":""}" data-a="spTag" data-k="r" data-i="${s.i}" title="Ritual">R</button>
         <button class="tag ${s.c?"on":""}" data-a="spTag" data-k="c" data-i="${s.i}" title="Concentration">C</button>
-        ${s.lvl===0?`<span style="width:58px"></span>`:isReady(s)?`<button class="btn sm pri" data-a="cast" data-i="${s.i}">Cast</button>`:s.r?`<button class="btn sm" data-a="cast" data-i="${s.i}">Ritual</button>`:`<span style="width:58px"></span>`}
+        ${s.lvl===0?`<span style="width:58px"></span>`:isReady(s)?`<button class="btn sm pri" data-a="cast" data-i="${s.i}">Cast</button>`:s.r&&hasSpellbook(s)?`<button class="btn sm" data-a="cast" data-i="${s.i}">Ritual</button>`:`<span style="width:58px"></span>`}
         <button class="x" data-a="del" data-k="spells" data-i="${s.i}" aria-label="Remove">×</button>
       </div>`).join("")}`).join("")}
-    <p class="muted small" style="margin-top:12px">Warlock and sorcerer spells are always ready. Unprepared wizard rituals can still be cast as rituals. R marks a ritual, C marks concentration. Casting a C spell sets your concentration. Pact slots can power any spell you know.</p>
+    <p class="muted small" style="margin-top:12px">Spells from classes that don’t prepare are always ready. Unprepared wizard rituals can still be cast as rituals. R marks a ritual, C marks concentration. Casting a C spell sets your concentration. Pact slots can power any spell you know.</p>
   </section>`;
 }
 
@@ -492,14 +510,15 @@ function renderInventory(){
 }
 
 /* ---------- town ---------- */
-function townNet(){const T=S.town;return T.income.reduce((a,x)=>a+Number(x.amt||0),0)-T.expenses.reduce((a,x)=>a+Number(x.amt||0),0)}
-function moneyRows(kind){return S.town[kind].map((x,i)=>`<div class="money">
+function townNet(){return T.income.reduce((a,x)=>a+Number(x.amt||0),0)-T.expenses.reduce((a,x)=>a+Number(x.amt||0),0)}
+function moneyRows(kind){return T[kind].map((x,i)=>`<div class="money">
   <input class="in" data-b="town.${kind}.${i}.name" value="${esc(x.name)}" aria-label="Name">
   <input class="in" type="number" data-b="town.${kind}.${i}.amt" value="${x.amt}" style="text-align:right" aria-label="Amount">
   <button class="x" data-a="del" data-k="town.${kind}" data-i="${i}" aria-label="Remove">×</button></div>`).join("")}
 function renderTown(){
-  const T=S.town, net=townNet();
-  return `<div class="grid">
+  if(!T) return renderTownBar()+`<section class="card"><h2>No town yet</h2><p class="muted">${session&&!firstSyncDone?"Loading…":"Start a town, or ask your GM to share theirs with you."}</p></section>`;
+  const net=townNet();
+  return renderTownBar()+`<div class="grid">
   <section class="card">
     <h2><input class="in bare" data-b="town.name" value="${esc(T.name)}" style="font-family:var(--display);font-size:23px;font-weight:600"><span class="muted small" style="font-family:var(--body);font-weight:400;white-space:nowrap">Turn ${T.turn}</span></h2>
     <div class="muted small">Treasury</div>
@@ -553,6 +572,7 @@ function render(){
   renderHeader();
   const y=window.scrollY;
   const m=document.getElementById("main");
+  if(!S&&!["town","sync"].includes(tab)){ m.innerHTML=renderNoChar(); window.scrollTo(0,y); return; }
   m.innerHTML={combat:renderCombat,spells:renderSpells,character:renderCharacter,inventory:renderInventory,town:renderTown,notes:renderNotes,sync:renderSync}[tab]();
   window.scrollTo(0,y);
 }
@@ -587,14 +607,14 @@ function doRest(kind){
 function castModal(i){
   const s=S.spells[i];
   const opts=[];
-  if(!isReady(s)){ modal(`<h2>Cast ${esc(s.name)}</h2><p class="muted">Not prepared. Wizards can still cast ritual spells from their spellbook.</p>${s.r?`<button class="btn" data-a="castAt" data-i="${i}" data-k="ritual">As a ritual (+10 minutes, no slot)</button>`:""}`); return; }
+  if(!isReady(s)){ modal(`<h2>Cast ${esc(s.name)}</h2><p class="muted">Not prepared. Wizards can still cast ritual spells from their spellbook.</p>${s.r&&hasSpellbook(s)?`<button class="btn" data-a="castAt" data-i="${i}" data-k="ritual">As a ritual (+10 minutes, no slot)</button>`:""}`); return; }
   for(let l=s.lvl;l<=9;l++){const sl=S.slots[l];if(sl.max-sl.used>0)opts.push(`<button class="btn" data-a="castAt" data-i="${i}" data-k="${l}">${ORD[l]}-level slot <span class="muted">(${sl.max-sl.used} left)</span></button>`)}
   if(S.pact.level>=s.lvl&&S.pact.max-S.pact.used>0)opts.push(`<button class="btn" data-a="castAt" data-i="${i}" data-k="pact" style="border-color:var(--violet)">Pact slot, ${ORD[S.pact.level]} level <span class="muted">(${S.pact.max-S.pact.used} left)</span></button>`);
   if(s.r)opts.push(`<button class="btn" data-a="castAt" data-i="${i}" data-k="ritual">As a ritual (+10 minutes, no slot)</button>`);
   modal(`<h2>Cast ${esc(s.name)}</h2>${s.c?`<p class="muted small">Concentration${S.conc?` – this ends ${esc(S.conc)}`:""}</p>`:""}${opts.length?opts.join(""):`<p>No slots of ${ORD[s.lvl]} level or higher left.</p>`}`);
 }
 
-function addTownLog(text,amt){S.town.log.push({turn:S.town.turn,text,amt:amt||0}); if(S.town.log.length>300)S.town.log.shift()}
+function addTownLog(text,amt){T.log.push({turn:T.turn,text,amt:amt||0}); if(T.log.length>300)T.log.shift()}
 
 document.addEventListener("click",e=>{
   const el=e.target.closest("[data-a]"); if(!el) return;
@@ -629,8 +649,25 @@ document.addEventListener("click",e=>{
       CFG.url=u; CFG.key=k; try{localStorage.setItem("dnd-sync-config",JSON.stringify({url:u,key:k}))}catch(e){} sb=null; initClient(); render(); return; }
     case "clearCfg": try{localStorage.removeItem("dnd-sync-config")}catch(e){} location.reload(); return;
     case "signIn": signIn(); return;
-    case "signOut": modal(`<h2>Sign out?</h2><p class="muted">Your sheet stays on this tablet. Changes won’t sync until you sign in again.</p><button class="btn dmg" data-a="confirmSignOut" style="text-align:center">Sign out</button>`); return;
-    case "confirmSignOut": closeModal(); if(sb) sb.auth.signOut().catch(()=>{}); session=null; try{localStorage.removeItem("dnd-sync-base");localStorage.removeItem("dnd-sync-rev")}catch(e){} lastRev=null; render(); return;
+    case "chars": charsModal(); return;
+    case "switchChar": activeC=k; activate(); persistIds(); closeModal(); render(); return;
+    case "newChar": modal(`<h2>New character</h2><label class="small muted">Name<input class="in" id="ncName" style="margin:2px 0 8px"></label><p class="muted small">Starts as a blank sheet. Fill it in on each tab, or send Claude photos of the paper sheet.</p><button class="btn pri" data-a="saveNewChar" style="text-align:center">Create character</button>`); setTimeout(()=>document.getElementById("ncName")?.focus(),50); return;
+    case "saveNewChar": { const n=document.getElementById("ncName").value.trim(); closeModal(); newChar(n); toast("Character created."); return; }
+    case "archiveChar": modal(`<h2>Archive ${esc(S.name||"this character")}?</h2><p class="muted">They disappear from your list but nothing is deleted. Restore them any time from Characters.</p><button class="btn dmg" data-a="confirmArchive" style="text-align:center">Archive</button>`); return;
+    case "confirmArchive": S.archived=true; save(); activeC=null; pickActive(); closeModal(); render(); return;
+    case "restoreChar": { CH[k].archived=false; activeC=k; activate(); save(); persistIds(); closeModal(); render(); return; }
+    case "newTown": modal(`<h2>New town</h2><label class="small muted">Name<input class="in" id="ntName" style="margin:2px 0 8px"></label><button class="btn pri" data-a="saveNewTown" style="text-align:center">Create town</button>`); return;
+    case "saveNewTown": { const n=document.getElementById("ntName").value.trim(); closeModal(); newTown(n); return; }
+    case "townShare": if(!navigator.onLine){toast("You need internet to share.");return;} loadMembers().then(shareModal); return;
+    case "addMember": addMember(); return;
+    case "removeMember": removeMember(k); return;
+    case "copyCode": if(navigator.clipboard) navigator.clipboard.writeText(session.user.id).then(()=>toast("Copied."),()=>toast("Couldn’t copy. Select it and copy by hand.")); return;
+    case "changePw": modal(`<h2>Change password</h2><label class="small muted">New password<input class="in" id="newPw" type="password" autocomplete="new-password" style="margin:2px 0 8px"></label><button class="btn pri" data-a="savePw" style="text-align:center">Change password</button>`); return;
+    case "savePw": { const pw=document.getElementById("newPw").value; if(pw.length<8){toast("Use at least 8 characters.");return;} sb.auth.updateUser({password:pw}).then(({error})=>{ if(error) toast("Couldn’t change it: "+error.message,4000); else { closeModal(); toast("Password changed."); } }); return; }
+    case "srcAdd": { const key="src"+Date.now().toString(36); S.sources[key]={label:"New class",abil:"int",prepares:false,level:1}; save(); render(); return; }
+    case "srcDel": { if(S.spells.some(s=>s.src===k)){ toast("Move or remove this class’s spells first."); return; } delete S.sources[k]; if(spellFilter===k) spellFilter="all"; save(); render(); return; }
+    case "signOut": modal(`<h2>Sign out?</h2><p class="muted">${anyPending()?"Some changes haven’t synced yet. Sync first, or they’ll stay only on this device. ":""}Your characters stay on this device. If a different account signs in here, this device’s copy is cleared and replaced with theirs.</p><button class="btn dmg" data-a="confirmSignOut" style="text-align:center">Sign out</button>`); return;
+    case "confirmSignOut": closeModal(); if(sb) sb.auth.signOut().catch(()=>{}); session=null; uid=null; render(); return;
     case "install": if(installEvt){ installEvt.prompt(); installEvt.userChoice.finally(()=>{installEvt=null;render();}); } return;
     case "cantripFormula": { const f=cfFeature(); if(f.used>=f.max){toast("Cantrip Formulas is used. It comes back after a long rest.");return;}
       const mine=S.spells.map((s,ix)=>({...s,ix})).filter(s=>s.src==="wizard"&&s.lvl===0);
@@ -645,13 +682,13 @@ document.addEventListener("click",e=>{
     case "doSwap": { const ix=Number(document.getElementById("cfOld").value); let n=document.getElementById("cfNew").value; if(n==="__other") n=document.getElementById("cfOther").value.trim(); if(!n) return;
       const old=S.spells[ix].name; S.spells[ix].name=n; S.spells[ix].c=false; S.spells[ix].r=false; cfFeature().used=1;
       closeModal(); save(); render(); toast(`Swapped ${old} for ${n}.`,3500); return; }
-    case "prep": { const s=S.spells[i]; if(!s.prep&&prepCount()>=prepLimit()){ toast(`You can prepare ${prepLimit()} wizard spells. Unprepare one first.`); return; } s.prep=!s.prep; save(); render(); return; }
+    case "prep": { const s=S.spells[i]; if(!s.prep&&prepCount(s.src)>=prepLimit(s.src)){ toast(`You can prepare ${prepLimit(s.src)} ${S.sources[s.src].label} spells. Unprepare one first.`); return; } s.prep=!s.prep; save(); render(); return; }
     case "cast": castModal(i); return;
     case "castAt": { const s=S.spells[i];
       if(k==="pact") S.pact.used++; else if(k!=="ritual") S.slots[k].used++;
       if(s.c) S.conc=s.name;
       closeModal(); save(); render(); toast(`Cast ${s.name}${k==="ritual"?" as a ritual":k==="pact"?" with a pact slot":" at "+ORD[k]+" level"}.`); return; }
-    case "addSpell": modal(`<h2>Add spell</h2>
+    case "addSpell": if(!Object.keys(S.sources).length){ S.sources.main={label:"Spellcasting",abil:"int",prepares:false,level:1}; save(); } modal(`<h2>Add spell</h2>
       <label class="small muted">Name<input class="in" id="nsName" style="margin:2px 0 8px"></label>
       <div class="row"><label class="small muted">Level <input class="in num" id="nsLvl" type="number" min="0" max="9" value="1"></label>
       <label class="small muted">From <select class="in" id="nsSrc" style="width:auto">${Object.keys(S.sources).map(k=>`<option value="${k}">${esc(S.sources[k].label)}</option>`).join("")}</select></label></div>
@@ -667,32 +704,32 @@ document.addEventListener("click",e=>{
       getP(k).push(clone(blank)); save(); render(); return; }
     case "del": { const arr=getP(k); const label=arr[i]?.name||"this"; modal(`<h2>Remove ${esc(label)}?</h2><button class="btn dmg" data-a="confirmDel" data-k="${k}" data-i="${i}" style="text-align:center">Remove</button>`); return; }
     case "confirmDel": getP(k).splice(i,1); closeModal(); save(); render(); return;
-    case "endTurn": { const net=townNet(); const T=S.town;
+    case "endTurn": { const net=townNet(); const T=T;
       modal(`<h2>End turn ${T.turn}?</h2><p>Income ${fmt(T.income.reduce((a,x)=>a+Number(x.amt||0),0))} gp, expenses ${fmt(T.expenses.reduce((a,x)=>a+Number(x.amt||0),0))} gp.</p>
       <p>Treasury goes from <strong>${fmt(T.treasury)}</strong> to <strong class="${net>=0?"pos":"neg"}">${fmt(T.treasury+net)} gp</strong>.</p>
       <button class="btn gold" data-a="confirmTurn" style="text-align:center">End turn</button>`); return; }
-    case "confirmTurn": { const net=townNet(); S.town.treasury=Number(S.town.treasury)+net; addTownLog("Turn ended: income collected, expenses paid",net); S.town.turn++; closeModal(); save(); render(); toast(`Turn ${S.town.turn} begins.`); return; }
+    case "confirmTurn": { const net=townNet(); T.treasury=Number(T.treasury)+net; addTownLog("Turn ended: income collected, expenses paid",net); T.turn++; closeModal(); save(); render(); toast(`Turn ${T.turn} begins.`); return; }
     case "townTx": modal(`<h2>Add transaction</h2>
       <label class="small muted">What happened<input class="in" id="txNote" placeholder="e.g. Sold surplus grain" style="margin:2px 0 8px"></label>
       <label class="small muted">Amount (gp)<input class="in" id="txAmt" type="number" style="margin:2px 0 8px"></label>
       <div class="row"><button class="btn pri" data-a="saveTx" data-k="1" style="flex:1;text-align:center">Add to treasury</button><button class="btn dmg" data-a="saveTx" data-k="-1" style="flex:1;text-align:center">Take from treasury</button></div>`); return;
-    case "saveTx": { const n=Math.abs(Math.floor(Number(document.getElementById("txAmt").value)||0)); if(!n) return; const amt=n*Number(k); S.town.treasury=Number(S.town.treasury)+amt; addTownLog(document.getElementById("txNote").value.trim()||(amt>0?"Deposit":"Withdrawal"),amt); closeModal(); save(); render(); return; }
-    case "statAdj": S.town.stats[i].val=Number(S.town.stats[i].val||0)+Number(k); save(); render(); return;
-    case "fund": { const p=S.town.projects[i]; const c=Number(p.cost)||0; S.town.treasury-=c; p.status="Building"; addTownLog(`Started ${p.name||"a project"}`,-c); save(); render(); return; }
+    case "saveTx": { const n=Math.abs(Math.floor(Number(document.getElementById("txAmt").value)||0)); if(!n) return; const amt=n*Number(k); T.treasury=Number(T.treasury)+amt; addTownLog(document.getElementById("txNote").value.trim()||(amt>0?"Deposit":"Withdrawal"),amt); closeModal(); save(); render(); return; }
+    case "statAdj": T.stats[i].val=Number(T.stats[i].val||0)+Number(k); save(); render(); return;
+    case "fund": { const p=T.projects[i]; const c=Number(p.cost)||0; T.treasury-=c; p.status="Building"; addTownLog(`Started ${p.name||"a project"}`,-c); save(); render(); return; }
     case "logNote": { const inp=document.getElementById("logNote"); const t=inp.value.trim(); if(!t){inp.focus();return;} addTownLog(t,0); save(); render(); return; }
     case "export": exportBackup(); return;
-    case "reset": modal(`<h2>Reset everything?</h2><p class="muted">This replaces all your changes with the original sheet, including the town. Save a backup first if you might want them.</p><button class="btn dmg" data-a="confirmReset" style="text-align:center">Reset</button>`); return;
-    case "confirmReset": S=clone(DEFAULT); closeModal(); save(); render(); return;
   }
 });
 
 document.addEventListener("input",e=>{
   const p=e.target.dataset?.b; if(!p) return;
-  let v=e.target.value; if(e.target.type==="number") v=v===""?0:Number(v);
+  let v=e.target.value; if(e.target.type==="number") v=v===""?0:Number(v); if(e.target.type==="checkbox") v=e.target.checked;
   setP(p,v); save(); if(p==="name"||p==="race"||p==="classes") renderHeader();
 });
 document.addEventListener("change",e=>{
   if(e.target.id==="importFile"){ importBackup(e.target.files[0]); return; }
+  if(e.target.dataset?.aChange==="switchTown"){ activeT=e.target.value; activate(); persistIds(); render(); return; }
+  if(!S&&!(e.target.dataset?.b||"").startsWith("town.")) return;
   const p=e.target.dataset?.b; if(!p) return;
   if(p==="conc"||p==="notes"||p==="profText"||p.endsWith(".note")||p.endsWith(".text")||p.endsWith(".name")) { renderHeader(); return; }
   // clamp used counts after max edits
@@ -705,42 +742,129 @@ document.addEventListener("change",e=>{
 document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&document.getElementById("modalRoot").innerHTML){closeModal();render();} });
 
 function exportBackup(){
-  const data=JSON.stringify(S,null,2), filename=(S.name||"character").replace(/[^\w-]+/g,"_")+"-backup.json";
+  if(!S) return;
+  const data=JSON.stringify({format:"dnd-sheet-backup-2",character:S,town:T},null,2), filename=(S.name||"character").replace(/[^\w-]+/g,"_")+"-backup.json";
   const url=URL.createObjectURL(new Blob([data],{type:"application/json"}));
   const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),2000); toast("Backup saved to Downloads.");
 }
 function importBackup(file){
   if(!file) return; const r=new FileReader();
-  r.onload=()=>{ try{ const o=JSON.parse(r.result); if(!o||!o.abil) throw 0; S=migrate(merge(clone(DEFAULT),o)); save(); render(); toast("Backup loaded."); }catch(e){ toast("That file isn’t a backup from this sheet."); } };
+  r.onload=()=>{ try{
+    const o=JSON.parse(r.result); let ch,tw;
+    if(o&&o.format==="dnd-sheet-backup-2"){ ch=o.character; tw=o.town; }
+    else if(o&&o.abil){ const m=migrate(merge(clone(DEFAULT),o)); tw=m.town; ch=m; }
+    else throw 0;
+    const id=newId(); const d=fillChar(ch); d.archived=false; d.updatedAt=Date.now();
+    CH[id]=d; lastJ["c"+id]=docJ(d); persistDoc("c",id); setMeta("c",id,{rev:null,base:null,pending:true,owner:uid}); activeC=id;
+    if(tw){ const tid=newId(); const t=fillTown(tw); t.updatedAt=Date.now(); TW[tid]=t; lastJ["t"+tid]=docJ(t); persistDoc("t",tid); setMeta("t",tid,{rev:null,base:null,pending:true,owner:uid}); activeT=tid; }
+    activate(); persistIds(); render(); sync(); toast(`Loaded ${d.name||"character"} as a new character.`);
+  }catch(e){ toast("That file isn’t a backup from this sheet."); } };
   r.readAsText(file);
 }
 
-/* ---------- cloud sync (Supabase) ---------- */
-const CFG=Object.assign({url:"",key:""},window.SYNC_CONFIG||{});
-try{const o=JSON.parse(localStorage.getItem("dnd-sync-config")||"null"); if(o&&o.url&&o.key){CFG.url=o.url;CFG.key=o.key;}}catch(e){}
-let sb=null, session=null, syncing=false, syncAgain=false, saveTimer=null, needsRender=false, installEvt=null, authErr="";
-let lastRev=(()=>{try{const v=localStorage.getItem("dnd-sync-rev");return v===null?null:Number(v)}catch(e){return null}})();
-let pendingSync=(()=>{try{return localStorage.getItem("dnd-sync-pending")==="1"}catch(e){return false}})();
-let lastSynced=(()=>{try{return Number(localStorage.getItem("dnd-sync-time"))||0}catch(e){return 0}})();
-let syncErr="";
-const TABLE="character_sheets";
-const OFFLINE_MSG="Offline: changes are saved on this tablet and will sync when you’re back online.";
-const timeout=ms=>new Promise((_,rej)=>setTimeout(()=>rej(new Error("The server took too long to answer")),ms));
-const withTimeout=(p,ms=12000)=>Promise.race([p,timeout(ms)]);
+/* ---------- storage: many characters, separate towns ---------- */
+const BLANK_CHAR={
+  v:4, updatedAt:0, archived:false,
+  name:"New character", race:"", classes:"", background:"", alignment:"",
+  prof:2, wizLevel:0,
+  abil:{str:10,dex:10,con:10,int:10,wis:10,cha:10},
+  saves:{}, skills:{},
+  hp:{max:10,cur:10,temp:0}, ac:10, shield:false, speed:30, initMisc:0,
+  conc:"", death:{s:0,f:0},
+  hd:[{die:8,total:1,used:0}],
+  conditions:[], exhaustion:0,
+  attacks:[], features:[],
+  slots:{1:{max:0,used:0},2:{max:0,used:0},3:{max:0,used:0},4:{max:0,used:0},5:{max:0,used:0},6:{max:0,used:0},7:{max:0,used:0},8:{max:0,used:0},9:{max:0,used:0}},
+  pact:{level:1,max:0,used:0},
+  sources:{},
+  spells:[],
+  coins:{cp:0,sp:0,ep:0,gp:0,pp:0},
+  items:[], profText:"", notes:""
+};
+const BLANK_TOWN={v:1, updatedAt:0, name:"New town", turn:1, treasury:0, income:[], expenses:[], stats:[], projects:[], log:[]};
 
-function persistLocal(){ try{localStorage.setItem("dnd-sheet-v1",JSON.stringify(S)); localStorage.setItem("dnd-sync-pending",pendingSync?"1":"0");}catch(e){} }
+const CH={}, TW={};           // id -> doc
+let activeC=null, activeT=null;
+let uid=null;                 // signed-in user id
+const lastJ={};               // change detection per doc
+const TABLE={c:"characters",t:"towns"};
+const ROOT={c:"",t:"town"};
+const newId=()=>(crypto.randomUUID?crypto.randomUUID():"10000000-1000-4000-8000-100000000000".replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16)));
+const LS={
+  get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(e){return d}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}},
+  del(k){try{localStorage.removeItem(k)}catch(e){}}
+};
+const docKey=(k,id)=>`dnd2-${k}:${id}`;
+const metaKey=(k,id)=>`dnd2-meta-${k}:${id}`;
+function getMeta(k,id){return LS.get(metaKey(k,id),{rev:null,base:null,pending:false,owner:null})}
+function setMeta(k,id,m){LS.set(metaKey(k,id),m)}
+function fillChar(d){const o=migrate(merge(clone(BLANK_CHAR),d||{})); delete o.town; return o}
+function fillTown(d){return merge(clone(BLANK_TOWN),d||{})}
+function docJ(doc){return JSON.stringify({...doc,updatedAt:0})}
+function persistIds(){LS.set("dnd2-ids",{c:Object.keys(CH),t:Object.keys(TW)}); LS.set("dnd2-active",{c:activeC,t:activeT})}
+function persistDoc(k,id){LS.set(docKey(k,id),(k==="c"?CH:TW)[id])}
+function attachTown(){ if(S) Object.defineProperty(S,"town",{get:()=>T,enumerable:false,configurable:true}); }
+function activate(){
+  S=activeC&&CH[activeC]?CH[activeC]:null;
+  T=activeT&&TW[activeT]?TW[activeT]:null;
+  attachTown();
+}
+function liveChars(){return Object.entries(CH).filter(([,d])=>!d.archived)}
+function pickActive(){
+  if(!activeC||!CH[activeC]||CH[activeC].archived){ const l=liveChars(); activeC=l.length?l[0][0]:null; }
+  if(!activeT||!TW[activeT]){ const t=Object.keys(TW); activeT=t.length?t[0]:null; }
+  activate(); persistIds();
+}
+function bootLocal(){
+  const ids=LS.get("dnd2-ids",null);
+  if(ids){
+    (ids.c||[]).forEach(id=>{const d=LS.get(docKey("c",id),null); if(d){CH[id]=fillChar(d); lastJ["c"+id]=docJ(CH[id]);}});
+    (ids.t||[]).forEach(id=>{const d=LS.get(docKey("t",id),null); if(d){TW[id]=fillTown(d); lastJ["t"+id]=docJ(TW[id]);}});
+    const a=LS.get("dnd2-active",{}); activeC=a.c; activeT=a.t;
+  } else {
+    // upgrade from the single-sheet version
+    const raw=LS.get("dnd-sheet-v1",null);
+    if(raw){
+      const old=migrate(merge(clone(DEFAULT),raw));
+      const sess=LS.get("dnd-sync-auth",null);
+      const u=sess&&(sess.user&&sess.user.id||sess.currentSession&&sess.currentSession.user&&sess.currentSession.user.id);
+      const cid=u||newId(), tid=u||newId();
+      const town=fillTown(Object.assign(clone(old.town||{}),{updatedAt:old.updatedAt||0}));
+      delete old.town;
+      CH[cid]=fillChar(old); TW[tid]=town;
+      lastJ["c"+cid]=docJ(CH[cid]); lastJ["t"+tid]=docJ(TW[tid]);
+      persistDoc("c",cid); persistDoc("t",tid);
+      setMeta("c",cid,{rev:null,base:null,pending:true,owner:u||null});
+      setMeta("t",tid,{rev:null,base:null,pending:true,owner:u||null});
+      activeC=cid; activeT=tid;
+      if(u) LS.set("dnd2-account",u);
+    }
+  }
+  pickActive();
+}
+
+function wipeLocal(){
+  Object.keys(CH).forEach(id=>{LS.del(docKey("c",id));LS.del(metaKey("c",id));delete CH[id];});
+  Object.keys(TW).forEach(id=>{LS.del(docKey("t",id));LS.del(metaKey("t",id));delete TW[id];});
+  activeC=activeT=null; activate(); persistIds();
+}
+/* save: stamps whichever open document actually changed */
+let saveTimer=null;
 function save(){
-  S.updatedAt=Date.now(); pendingSync=true; persistLocal();
+  [["c",activeC,S],["t",activeT,T]].forEach(([k,id,doc])=>{
+    if(!doc||!id) return;
+    const j=docJ(doc);
+    if(lastJ[k+id]!==j){ lastJ[k+id]=j; doc.updatedAt=Date.now(); persistDoc(k,id); const m=getMeta(k,id); m.pending=true; setMeta(k,id,m); }
+  });
   if(syncing) syncAgain=true;
   paintSaveState();
   clearTimeout(saveTimer); saveTimer=setTimeout(()=>sync(),1500);
 }
-function getBase(){try{return JSON.parse(localStorage.getItem("dnd-sync-base")||"null")}catch(e){return null}}
-function setBase(o,rev){lastRev=rev; try{localStorage.setItem("dnd-sync-base",JSON.stringify(o)); localStorage.setItem("dnd-sync-rev",String(rev));}catch(e){}}
+function anyPending(){ return [...Object.keys(CH).map(id=>getMeta("c",id)),...Object.keys(TW).map(id=>getMeta("t",id))].some(m=>m.pending); }
 
-/* three-way merge: keeps changes from both sides; on a true clash the newer side wins.
-   Money (treasury, coins) adds both sides' changes together. Chronicle entries are combined. */
+/* ---------- three-way merge ---------- */
 const isObj=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const SUM_PATHS=/^(town\.treasury|coins\.(cp|sp|ep|gp|pp))$/;
@@ -750,9 +874,7 @@ function merge3(b,l,r,localNewer,path){
   if(same(l,r)) return clone(l);
   if(isObj(l)&&isObj(r)){
     const out={};
-    for(const k of new Set([...Object.keys(l),...Object.keys(r)])){
-      out[k]=merge3(isObj(b)?b[k]:undefined,l[k],r[k],localNewer,path?path+"."+k:k);
-    }
+    for(const k of new Set([...Object.keys(l),...Object.keys(r)])) out[k]=merge3(isObj(b)?b[k]:undefined,l[k],r[k],localNewer,path?path+"."+k:k);
     return out;
   }
   if(same(b,l)) return clone(r);
@@ -766,12 +888,22 @@ function merge3(b,l,r,localNewer,path){
   return clone(localNewer?l:r);
 }
 
+/* ---------- cloud sync (Supabase) ---------- */
+const CFG=Object.assign({url:"",key:""},window.SYNC_CONFIG||{});
+try{const o=JSON.parse(localStorage.getItem("dnd-sync-config")||"null"); if(o&&o.url&&o.key){CFG.url=o.url;CFG.key=o.key;}}catch(e){}
+let sb=null, session=null, syncing=false, syncAgain=false, needsRender=false, installEvt=null, authErr="", syncErr="", firstSyncDone=false;
+let lastSynced=LS.get("dnd-sync-time",0);
+const members={}; // townId -> [{user_id, role}]
+const OFFLINE_MSG="Offline: changes are saved on this device and will sync when you’re back online.";
+const timeout=ms=>new Promise((_,rej)=>setTimeout(()=>rej(new Error("The server took too long to answer")),ms));
+const withTimeout=(p,ms=12000)=>Promise.race([p,timeout(ms)]);
+
 function initClient(){
   if(sb||!CFG.url||!CFG.key||!window.supabase) return;
   try{
     sb=supabase.createClient(CFG.url,CFG.key,{auth:{persistSession:true,autoRefreshToken:true,storageKey:"dnd-sync-auth"}});
-    sb.auth.getSession().then(({data})=>{session=data.session; if(tab==="sync") render(); paintSaveState();});
-    sb.auth.onAuthStateChange((ev,s)=>{ session=s; paintSaveState(); if(ev==="SIGNED_IN") setTimeout(()=>sync(),0); if(tab==="sync") render(); });
+    sb.auth.getSession().then(({data})=>{session=data.session; uid=session?.user?.id||null; render(); paintSaveState();});
+    sb.auth.onAuthStateChange((ev,s)=>{ session=s; uid=s?.user?.id||null; paintSaveState(); if(ev==="SIGNED_IN") setTimeout(()=>sync(),0); if(tab==="sync") render(); });
   }catch(e){ sb=null; syncErr="The project URL or key looks wrong."; }
 }
 
@@ -781,64 +913,101 @@ async function signIn(){
   if(!navigator.onLine){ toast("You need internet to sign in the first time."); return; }
   initClient(); if(!sb){ toast("Sync isn’t set up yet."); return; }
   authErr="";
-  try{
-    const {data,error}=await withTimeout(sb.auth.signInWithPassword({email,password}));
-    if(error) throw error;
-    session=data.session; toast("Signed in. Syncing…");
-  }catch(e){ authErr=e.message||"Sign-in failed."; }
+  try{ const {data,error}=await withTimeout(sb.auth.signInWithPassword({email,password})); if(error) throw error; session=data.session; uid=session.user.id; toast("Signed in. Syncing…"); }
+  catch(e){ authErr=e.message||"Sign-in failed."; }
   render();
 }
 
-function adopt(merged,snapshot){
-  // keep any edits made while the sync was running
-  if(syncAgain){ S=merge3(snapshot,S,merged,true,""); }
-  else { S=merged; }
-  try{localStorage.setItem("dnd-sheet-v1",JSON.stringify(S))}catch(e){}
-  const a=document.activeElement;
-  if(a&&(a.tagName==="INPUT"||a.tagName==="TEXTAREA"||a.tagName==="SELECT")&&a.closest("main")){ needsRender=true; renderHeader(); }
-  else render();
+function adoptDoc(k,id,merged,snapshot){
+  const docs=k==="c"?CH:TW, fill=k==="c"?fillChar:fillTown;
+  const cur=docs[id];
+  let next;
+  if(cur&&snapshot&&docJ(cur)!==docJ(snapshot)){ next=fill(merge3(snapshot,cur,merged,true,ROOT[k])); next.updatedAt=Date.now(); const m=getMeta(k,id); m.pending=true; setMeta(k,id,m); }
+  else next=fill(merged);
+  docs[id]=next; lastJ[k+id]=docJ(next); persistDoc(k,id);
 }
+
+async function syncKind(k,rows){
+  const docs=k==="c"?CH:TW, fill=k==="c"?fillChar:fillTown, table=TABLE[k];
+  const remote={}; rows.forEach(r=>remote[r.id]=r);
+  const ids=new Set([...Object.keys(docs),...Object.keys(remote)]);
+  for(const id of ids){
+    const local=docs[id], row=remote[id], meta=getMeta(k,id);
+    if(!local){ // new from the cloud
+      docs[id]=fill(row.data); lastJ[k+id]=docJ(docs[id]); persistDoc(k,id);
+      setMeta(k,id,{rev:row.rev,base:clone(docs[id]),pending:false,owner:row.owner}); continue;
+    }
+    if(!row){
+      if(k==="t"&&meta.rev!==null&&meta.owner&&meta.owner!==uid){ // access to a shared town was removed
+        delete docs[id]; LS.del(docKey(k,id)); LS.del(metaKey(k,id)); continue;
+      }
+      const snapshot=clone(local);
+      const ins={id,data:snapshot,rev:1,name:snapshot.name||""}; if(k==="c") ins.archived=!!snapshot.archived;
+      const {error}=await withTimeout(sb.from(table).insert(ins));
+      if(error){ if(error.code==="23505") { syncAgain=true; continue; } throw error; }
+      setMeta(k,id,{rev:1,base:snapshot,pending:docJ(docs[id])!==docJ(snapshot),owner:uid}); continue;
+    }
+    if(!meta.pending&&meta.rev===row.rev) continue;
+    const snapshot=clone(local);
+    const rdata=fill(row.data);
+    let merged;
+    if(!meta.base||meta.rev===null) merged=(snapshot.updatedAt||0)>(rdata.updatedAt||0)?clone(snapshot):rdata;
+    else merged=merge3(meta.base,snapshot,rdata,(snapshot.updatedAt||0)>=(rdata.updatedAt||0),ROOT[k]);
+    merged.updatedAt=Math.max(snapshot.updatedAt||0,rdata.updatedAt||0);
+    if(same(merged,rdata)){
+      setMeta(k,id,{rev:row.rev,base:clone(merged),pending:false,owner:row.owner}); adoptDoc(k,id,merged,snapshot); continue;
+    }
+    const upd={data:merged,rev:row.rev+1,name:merged.name||""}; if(k==="c") upd.archived=!!merged.archived;
+    const {data:res,error}=await withTimeout(sb.from(table).update(upd).eq("id",id).eq("rev",row.rev).select("rev"));
+    if(error){ if(k==="t"&&(error.code==="42501"||error.code==="PGRST301")){ setMeta(k,id,{...meta,rev:row.rev}); docs[id]=rdata; persistDoc(k,id); continue; } throw error; }
+    if(!res||!res.length){ // no permission (viewer) or someone saved at the same moment
+      if(k==="t"&&row.owner!==uid&&townRole(id)==="viewer"){ setMeta(k,id,{rev:row.rev,base:clone(rdata),pending:false,owner:row.owner}); adoptDoc(k,id,rdata,null); }
+      else syncAgain=true;
+      continue;
+    }
+    setMeta(k,id,{rev:row.rev+1,base:clone(merged),pending:false,owner:row.owner}); adoptDoc(k,id,merged,snapshot);
+  }
+}
+
+async function loadMembers(){
+  if(!sb||!uid) return;
+  const {data,error}=await withTimeout(sb.from("town_members").select("town_id,user_id,role"));
+  if(error) return;
+  Object.keys(members).forEach(k=>delete members[k]);
+  (data||[]).forEach(m=>{(members[m.town_id]??=[]).push(m)});
+}
+function townOwner(id){return getMeta("t",id).owner}
+function townRole(id){ if(!uid) return "owner"; const o=townOwner(id); if(!o||o===uid) return "owner"; const m=(members[id]||[]).find(x=>x.user_id===uid); return m?m.role:"viewer"; }
 
 async function sync(manual){
   if(!sb||!CFG.url){ paintSaveState(); return; }
   if(!navigator.onLine){ paintSaveState(); if(manual) toast("Still offline."); return; }
   if(syncing){ syncAgain=true; return; }
   let s; try{ s=(await sb.auth.getSession()).data.session; }catch(e){ s=null; }
-  session=s; if(!s){ paintSaveState(); return; }
+  session=s; uid=s?.user?.id||null; if(!s){ paintSaveState(); return; }
+  const acct=LS.get("dnd2-account",null);
+  if(acct&&acct!==uid) wipeLocal();
+  LS.set("dnd2-account",uid);
   syncing=true; syncAgain=false; syncErr=""; paintSaveState();
-  const uid=s.user.id;
   try{
-    let done=false;
-    for(let attempt=0;attempt<4&&!done;attempt++){
-      const snapshot=clone(S);
-      const {data:row,error}=await withTimeout(sb.from(TABLE).select("data,rev").eq("user_id",uid).maybeSingle());
-      if(error) throw error;
-      if(!row){
-        const {error:e2}=await withTimeout(sb.from(TABLE).insert({user_id:uid,data:snapshot,rev:1}));
-        if(e2){ if(e2.code==="23505") continue; throw e2; }
-        setBase(snapshot,1); done=true; break;
-      }
-      const remote=migrate(merge(clone(DEFAULT),row.data||{}));
-      const base=getBase();
-      let merged;
-      if(!base||lastRev===null){ merged=(snapshot.updatedAt||0)>(remote.updatedAt||0)?clone(snapshot):remote; }
-      else merged=merge3(base,snapshot,remote,(snapshot.updatedAt||0)>=(remote.updatedAt||0),"");
-      merged.updatedAt=Math.max(snapshot.updatedAt||0,remote.updatedAt||0);
-      if(same(merged,remote)){ setBase(merged,row.rev); adopt(merged,snapshot); done=true; break; }
-      const {data:upd,error:e3}=await withTimeout(sb.from(TABLE).update({data:merged,rev:row.rev+1}).eq("user_id",uid).eq("rev",row.rev).select("rev"));
-      if(e3) throw e3;
-      if(!upd||!upd.length) continue; // the other device saved at the same moment: try again
-      setBase(merged,row.rev+1); adopt(merged,snapshot); done=true;
-    }
-    if(!done) throw new Error("Couldn’t settle changes with the other device. Try again.");
-    pendingSync=syncAgain; persistLocal();
-    lastSynced=Date.now(); try{localStorage.setItem("dnd-sync-time",String(lastSynced))}catch(e){}
+    await loadMembers();
+    const {data:cr,error:ce}=await withTimeout(sb.from("characters").select("id,owner,data,rev"));
+    if(ce) throw ce;
+    await syncKind("c",cr||[]);
+    const {data:tr,error:te}=await withTimeout(sb.from("towns").select("id,owner,data,rev"));
+    if(te) throw te;
+    await syncKind("t",tr||[]);
+    const wasC=activeC, wasT=activeT;
+    pickActive();
+    lastSynced=Date.now(); LS.set("dnd-sync-time",lastSynced); firstSyncDone=true;
+    const a=document.activeElement;
+    if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)&&a.closest("main")&&wasC===activeC&&wasT===activeT){ needsRender=true; renderHeader(); } else render();
     if(manual) toast("Synced.");
   }catch(e){
     syncErr=navigator.onLine?(e.message||"Sync failed."):"";
     if(manual&&syncErr) toast("Sync failed: "+syncErr,4000);
   }finally{
-    syncing=false; paintSaveState(); if(tab==="sync"&&!needsRender) render();
+    syncing=false; paintSaveState();
     if(syncAgain){ syncAgain=false; setTimeout(()=>sync(),800); }
   }
 }
@@ -847,17 +1016,21 @@ async function check(){
   if(!sb||!navigator.onLine||document.hidden||syncing) return;
   let s; try{ s=(await sb.auth.getSession()).data.session; }catch(e){ return; }
   if(!s) return;
-  if(pendingSync||lastRev===null) return sync();
-  try{ const {data}=await withTimeout(sb.from(TABLE).select("rev").eq("user_id",s.user.id).maybeSingle(),8000); if(data&&data.rev!==lastRev) sync(); }catch(e){}
+  if(anyPending()) return sync();
+  try{
+    const [{data:c},{data:t}]=await Promise.all([sb.from("characters").select("id,rev"),sb.from("towns").select("id,rev")]);
+    const changed=(rows,k,docs)=>(rows||[]).some(r=>getMeta(k,r.id).rev!==r.rev)||(rows||[]).length!==Object.keys(docs).length;
+    if(changed(c,"c",CH)||changed(t,"t",TW)) sync();
+  }catch(e){}
 }
 
 function syncLabel(){
-  if(!CFG.url||!CFG.key) return {pill:"",text:"Sync isn’t set up. Your sheet is saved on this tablet only."};
-  if(!session) return {pill:"",text:"Signed out. Your sheet is saved on this tablet only."};
-  if(!navigator.onLine) return {pill:"Offline: saving on this tablet",text:OFFLINE_MSG};
+  if(!CFG.url||!CFG.key) return {pill:"",text:"Sync isn’t set up. Your data is saved on this device only."};
+  if(!session) return {pill:"",text:"Signed out. Your data is saved on this device only."};
+  if(!navigator.onLine) return {pill:"Offline: saving on this device",text:OFFLINE_MSG};
   if(syncing) return {pill:"",text:"Syncing…"};
   if(syncErr) return {pill:"Not synced: tap to retry",text:"Last sync failed: "+syncErr};
-  if(pendingSync) return {pill:"",text:"Waiting to sync…"};
+  if(anyPending()) return {pill:"",text:"Waiting to sync…"};
   return {pill:"",text:lastSynced?"Synced "+new Date(lastSynced).toLocaleString():"Synced"};
 }
 function paintSaveState(){
@@ -867,44 +1040,105 @@ function paintSaveState(){
   p.hidden=!L.pill; p.textContent=L.pill;
 }
 
+/* ---------- characters & towns UI ---------- */
+function charsModal(){
+  const live=liveChars(), arch=Object.entries(CH).filter(([,d])=>d.archived);
+  modal(`<h2>Characters</h2>
+    ${live.length?live.map(([id,d])=>`<button class="btn ${id===activeC?"pri":""}" data-a="switchChar" data-k="${id}"><strong>${esc(d.name||"Unnamed")}</strong> <span class="${id===activeC?"":"muted"} small">${esc([d.race,d.classes].filter(Boolean).join(", "))}</span></button>`).join(""):`<p class="muted">No characters yet.</p>`}
+    <button class="btn" data-a="newChar" style="text-align:center">New character</button>
+    ${S?`<button class="btn ghost" data-a="archiveChar" style="text-align:center">Archive ${esc(S.name||"this character")}</button>`:""}
+    ${arch.length?`<h3 style="font-family:var(--display);margin:16px 0 4px">Archived</h3>${arch.map(([id,d])=>`<button class="btn ghost" data-a="restoreChar" data-k="${id}">${esc(d.name||"Unnamed")} <span class="muted small">Restore</span></button>`).join("")}`:""}`);
+}
+function newChar(name){
+  const id=newId(); const d=clone(BLANK_CHAR); d.name=name||"New character"; d.updatedAt=Date.now();
+  CH[id]=d; lastJ["c"+id]=docJ(d); persistDoc("c",id); setMeta("c",id,{rev:null,base:null,pending:true,owner:uid});
+  activeC=id; activate(); persistIds(); render(); sync();
+}
+function newTown(name){
+  const id=newId(); const d=clone(BLANK_TOWN); d.name=name||"New town"; d.updatedAt=Date.now();
+  TW[id]=d; lastJ["t"+id]=docJ(d); persistDoc("t",id); setMeta("t",id,{rev:null,base:null,pending:true,owner:uid});
+  activeT=id; activate(); persistIds(); render(); sync();
+}
+function renderNoChar(){
+  return `<div class="grid"><section class="card" style="grid-column:1/-1"><h2>No character here yet</h2>
+    ${session&&!firstSyncDone&&navigator.onLine?`<p class="muted">Loading your characters…</p>`:""}
+    <p class="muted">${session?"Start a new character, or restore an archived one from the Characters list.":"Sign in on the Sync tab to load your characters, or start a new one on this device."}</p>
+    <div class="row"><button class="btn pri" data-a="newChar">New character</button>${session?"":`<button class="btn" data-a="tab" data-k="sync">Go to Sync</button>`}</div></section></div>`;
+}
+function renderTownBar(){
+  const ids=Object.keys(TW);
+  const role=activeT?townRole(activeT):"owner";
+  const shared=activeT&&townOwner(activeT)&&uid&&townOwner(activeT)!==uid;
+  return `<section class="card" style="margin-bottom:16px"><div class="row">
+    ${ids.length?`<label class="small muted">Town <select class="in" data-a-change="switchTown" style="width:auto;min-width:180px">${ids.map(id=>`<option value="${id}" ${id===activeT?"selected":""}>${esc(TW[id].name||"Unnamed town")}</option>`).join("")}</select></label>`:""}
+    ${shared?`<span class="tag on">Shared with you${role==="viewer"?" (view only)":""}</span>`:""}
+    <button class="btn sm" data-a="newTown">New town</button>
+    ${activeT&&role==="owner"&&session?`<button class="btn sm" data-a="townShare">Share</button>`:""}
+  </div></section>`;
+}
+function shareModal(){
+  const list=members[activeT]||[];
+  modal(`<h2>Share ${esc(T.name||"this town")}</h2>
+    <p class="muted small">Your GM needs an account in this app. They’ll find their user code on their Sync tab. Paste it here.</p>
+    ${list.length?list.map(m=>`<div class="row" style="margin-bottom:6px"><code style="flex:1;font-size:13px;word-break:break-all">${esc(m.user_id)}</code><span class="tag on">${m.role==="editor"?"Can edit":"View only"}</span><button class="x" data-a="removeMember" data-k="${m.user_id}" aria-label="Remove">×</button></div>`).join(""):`<p class="muted">Not shared with anyone yet.</p>`}
+    <label class="small muted">User code<input class="in" id="memCode" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="margin:2px 0 8px"></label>
+    <label class="small muted">Access <select class="in" id="memRole" style="width:auto"><option value="editor">Can edit</option><option value="viewer">View only</option></select></label>
+    <button class="btn pri" data-a="addMember" style="text-align:center">Add person</button>`);
+}
+async function addMember(){
+  const code=document.getElementById("memCode").value.trim().toLowerCase(), role=document.getElementById("memRole").value;
+  if(!/^[0-9a-f-]{36}$/.test(code)){ toast("That doesn’t look like a user code."); return; }
+  if(code===uid){ toast("That’s your own code."); return; }
+  if(anyPending()||getMeta("t",activeT).rev===null){ await sync(); }
+  const {error}=await withTimeout(sb.from("town_members").insert({town_id:activeT,user_id:code,role}));
+  if(error){ toast(error.code==="23503"?"No account with that code. Check it and try again.":error.code==="23505"?"They already have access.":"Couldn’t share: "+error.message,4500); return; }
+  await loadMembers(); shareModal(); toast("Shared.");
+}
+async function removeMember(code){
+  const {error}=await withTimeout(sb.from("town_members").delete().eq("town_id",activeT).eq("user_id",code));
+  if(error){ toast("Couldn’t remove: "+error.message); return; }
+  await loadMembers(); shareModal();
+}
+
 function renderSync(){
   const L=syncLabel();
   let acct;
   if(!CFG.url||!CFG.key){
-    acct=`<p class="muted">Paste your Supabase project details. You only do this once per device, or put them in <code>config.js</code> so every device has them.</p>
+    acct=`<p class="muted">Paste your Supabase project details.</p>
       <label class="small muted">Project URL<input class="in" id="cfgUrl" placeholder="https://xxxx.supabase.co" style="margin:2px 0 8px"></label>
       <label class="small muted">Publishable (anon) key<input class="in" id="cfgKey" style="margin:2px 0 8px"></label>
       <button class="btn pri" data-a="saveCfg">Save sync settings</button>`;
   } else if(!session){
-    acct=`<p class="muted">Sign in with the account you made in Supabase.</p>
+    acct=`<p class="muted">Sign in with your app account.</p>
       <label class="small muted">Email<input class="in" id="authEmail" type="email" autocomplete="username" style="margin:2px 0 8px"></label>
       <label class="small muted">Password<input class="in" id="authPass" type="password" autocomplete="current-password" style="margin:2px 0 8px"></label>
       ${authErr?`<p class="neg small">${esc(authErr)}</p>`:""}
       <button class="btn pri" data-a="signIn">Sign in</button>`;
   } else {
     acct=`<p>Signed in as <strong>${esc(session.user.email||"you")}</strong></p>
-      <div class="row"><button class="btn pri" data-a="resync">Sync now</button><button class="btn" data-a="signOut">Sign out</button></div>`;
+      <div class="row"><button class="btn pri" data-a="resync">Sync now</button><button class="btn" data-a="changePw">Change password</button><button class="btn" data-a="signOut">Sign out</button></div>
+      <h3>Your user code</h3><p class="muted small">Give this to someone who wants to share a town with you.</p>
+      <div class="row"><code style="flex:1;word-break:break-all;font-size:14px">${esc(session.user.id)}</code><button class="btn sm" data-a="copyCode">Copy</button></div>`;
   }
   return `<div class="grid">
     <section class="card"><h2>Sync</h2><p class="small" id="saveState">${esc(L.text)}</p>${acct}
       ${CFG.url?`<details style="margin-top:14px"><summary class="muted small">Project settings</summary><p class="small muted" style="word-break:break-all">${esc(CFG.url)}</p><button class="btn sm" data-a="clearCfg">Use different project settings</button></details>`:""}
     </section>
     <section class="card"><h2>Backup</h2>
-      <p class="muted small">A backup file holds your whole sheet and town. Load one here to move data from the claude.ai version.</p>
-      <div class="row"><button class="btn" data-a="export">Save backup file</button><label class="btn">Load backup<input type="file" accept=".json,application/json" id="importFile" hidden></label></div>
+      <p class="muted small">Saves the open character and town to a file. Loading a backup adds it as a new character, so nothing gets overwritten.</p>
+      <div class="row"><button class="btn" data-a="export" ${S?"":"disabled"}>Save backup file</button><label class="btn">Load backup<input type="file" accept=".json,application/json" id="importFile" hidden></label></div>
       ${installEvt?`<button class="btn pri" data-a="install" style="margin-top:12px">Install as an app</button>`:""}
-      <button class="btn ghost" data-a="reset" style="margin-top:12px;color:var(--blood)">Reset to original sheet</button>
     </section></div>`;
 }
 
 window.addEventListener("online",()=>{ toast("Back online. Syncing your changes."); paintSaveState(); sync(); });
-window.addEventListener("offline",()=>{ paintSaveState(); toast("You’re offline. Keep playing: changes are saved on this tablet.",4000); });
+window.addEventListener("offline",()=>{ paintSaveState(); toast("You’re offline. Keep playing: changes are saved on this device.",4000); });
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden) check(); });
 document.addEventListener("focusout",()=>{ setTimeout(()=>{ const a=document.activeElement; if(needsRender&&!(a&&a.closest&&a.closest("main")&&/INPUT|TEXTAREA|SELECT/.test(a.tagName))){ needsRender=false; render(); } },0); });
 window.addEventListener("beforeinstallprompt",e=>{ e.preventDefault(); installEvt=e; if(tab==="sync") render(); });
 setInterval(check,20000);
 
-initClient(); render(); paintSaveState(); setTimeout(()=>sync(),300);
+bootLocal(); initClient(); render(); paintSaveState(); setTimeout(()=>sync(),300);
 if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
 </script>
 </body>

@@ -14,20 +14,9 @@ Setup takes about 30 minutes, once. A computer makes the upload steps easier, bu
    - **Project URL**: from **Project Settings > Data API**. It looks like `https://abcdefgh.supabase.co`.
    - **Publishable key**: from **Project Settings > API Keys**. It starts with `sb_publishable_`. If you only see "anon public", use that one.
 
-## 2. Add your details to `config.js`
+## 2. `config.js`
 
-Open `config.js` in any text editor and paste the URL and key between the quotes:
-
-```js
-window.SYNC_CONFIG = {
-  url: "https://abcdefgh.supabase.co",
-  key: "sb_publishable_..."
-};
-```
-
-These values are safe to put online. Your data is protected by your login and the rules from step 1.
-
-You can skip this step and paste the URL and key into the app's **Sync** tab instead. You'd then have to do that on each device.
+Already filled in with your project details. Nothing to do here.
 
 ## 3. Put the app online (GitHub Pages, free)
 

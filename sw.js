@@ -1,5 +1,5 @@
 // Offline support: keeps a copy of the app on the device.
-const CACHE = "galesh-sheet-v1";
+const CACHE = "galesh-sheet-v2";
 const SHELL = ["./", "./index.html", "./config.js", "./supabase.js", "./manifest.webmanifest",
   "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png"];
 
