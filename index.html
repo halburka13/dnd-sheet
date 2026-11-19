@@ -265,6 +265,7 @@ const DEFAULT={
 
 let S=null, T=null;
 const TOWN_ONLY=window.APP_MODE==="town";
+if(!TOWN_ONLY&&/\/town\/?(index\.html)?$/.test(location.pathname)&&!/[?&]v=/.test(location.search)){ location.replace(location.pathname.replace(/\/town\/?(index\.html)?$/,"/town/")+"?v="+Date.now()); }
 const NS=TOWN_ONLY?"dndtown":"dnd2";
 let tab=TOWN_ONLY?"town":"combat";
 let spellFilter="all";

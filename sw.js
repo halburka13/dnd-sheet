@@ -1,5 +1,5 @@
 // Offline support: keeps a copy of the app on the device.
-const CACHE = "galesh-sheet-v3";
+const CACHE = "galesh-sheet-v4";
 const SHELL = ["./", "./index.html", "./config.js", "./supabase.js", "./manifest.webmanifest",
   "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png"];
 
@@ -17,7 +17,10 @@ self.addEventListener("fetch", e => {
   const sameOrigin = url.origin === self.location.origin;
   const isFont = url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com";
   if (!sameOrigin && !isFont) return; // sync traffic goes straight to the network
-  if (sameOrigin && url.pathname.includes("/town/")) return; // the town app has its own offline copy
+  // Only answer for this app's own pages. Anything else under the site (like /town) goes to the network.
+  const rel = url.pathname.slice(new URL(self.registration.scope).pathname.length);
+  if (sameOrigin && /^town(\/|$)/.test(rel)) return;
+  if (req.mode === "navigate" && !(rel === "" || rel === "index.html")) return;
 
   if (isFont) {
     e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(res => {
