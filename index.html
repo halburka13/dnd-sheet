@@ -264,7 +264,9 @@ const DEFAULT={
 };
 
 let S=null, T=null;
-let tab="combat";
+const TOWN_ONLY=window.APP_MODE==="town";
+const NS=TOWN_ONLY?"dndtown":"dnd2";
+let tab=TOWN_ONLY?"town":"combat";
 let spellFilter="all";
 
 function clone(o){return JSON.parse(JSON.stringify(o))}
@@ -311,6 +313,16 @@ function roll(d){return 1+Math.floor(Math.random()*d)}
 
 /* ---------- header ---------- */
 function renderHeader(){
+  if(TOWN_ONLY){
+    document.querySelectorAll('.rests').forEach(b=>b.hidden=true);
+    document.querySelector('.who').removeAttribute("data-a");
+    document.getElementById("tabs").innerHTML=[["town","Town"],["sync","Sync"]].map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" data-a="tab" data-k="${k}">${l}</button>`).join("");
+    document.getElementById("hName").textContent=T?(T.name||"Unnamed town"):"Town manager";
+    document.getElementById("hSub").textContent=T?`Turn ${T.turn} · Treasury ${fmt(T.treasury)} gp`:"Sign in to load your towns";
+    document.getElementById("vitals").innerHTML="";
+    document.title=(T?T.name+" – ":"")+"Town manager";
+    return;
+  }
   document.querySelectorAll('.rests [data-a="shortRest"],.rests [data-a="longRest"]').forEach(b=>b.hidden=!S);
   const tabs0=[["combat","Combat"],["spells","Spells"],["character","Character"],["inventory","Inventory"],["town","Town"],["notes","Notes"],["sync","Sync"]];
   document.getElementById("tabs").innerHTML=tabs0.map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" data-a="tab" data-k="${k}">${l}</button>`).join("");
@@ -724,7 +736,7 @@ document.addEventListener("click",e=>{
 document.addEventListener("input",e=>{
   const p=e.target.dataset?.b; if(!p) return;
   let v=e.target.value; if(e.target.type==="number") v=v===""?0:Number(v); if(e.target.type==="checkbox") v=e.target.checked;
-  setP(p,v); save(); if(p==="name"||p==="race"||p==="classes") renderHeader();
+  setP(p,v); save(); if(p==="name"||p==="race"||p==="classes"||(TOWN_ONLY&&p.startsWith("town."))) renderHeader();
 });
 document.addEventListener("change",e=>{
   if(e.target.id==="importFile"){ importBackup(e.target.files[0]); return; }
@@ -742,6 +754,7 @@ document.addEventListener("change",e=>{
 document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&document.getElementById("modalRoot").innerHTML){closeModal();render();} });
 
 function exportBackup(){
+  if(TOWN_ONLY){ if(!T) return; const data=JSON.stringify({format:"dnd-town-backup-1",town:T},null,2); const url=URL.createObjectURL(new Blob([data],{type:"application/json"})); const a=document.createElement("a"); a.href=url; a.download=(T.name||"town").replace(/[^\w-]+/g,"_")+"-town-backup.json"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),2000); toast("Backup saved to Downloads."); return; }
   if(!S) return;
   const data=JSON.stringify({format:"dnd-sheet-backup-2",character:S,town:T},null,2), filename=(S.name||"character").replace(/[^\w-]+/g,"_")+"-backup.json";
   const url=URL.createObjectURL(new Blob([data],{type:"application/json"}));
@@ -752,6 +765,9 @@ function importBackup(file){
   if(!file) return; const r=new FileReader();
   r.onload=()=>{ try{
     const o=JSON.parse(r.result); let ch,tw;
+    if(TOWN_ONLY){ const town=o&&(o.town||(o.format===undefined&&o.treasury!==undefined?o:null)); if(!town) throw 0;
+      const tid=newId(); const t=fillTown(town); t.updatedAt=Date.now(); TW[tid]=t; lastJ["t"+tid]=docJ(t); persistDoc("t",tid); setMeta("t",tid,{rev:null,base:null,pending:true,owner:uid}); activeT=tid;
+      activate(); persistIds(); render(); sync(); toast(`Loaded ${t.name||"town"} as a new town.`); return; }
     if(o&&o.format==="dnd-sheet-backup-2"){ ch=o.character; tw=o.town; }
     else if(o&&o.abil){ const m=migrate(merge(clone(DEFAULT),o)); tw=m.town; ch=m; }
     else throw 0;
@@ -796,14 +812,14 @@ const LS={
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}},
   del(k){try{localStorage.removeItem(k)}catch(e){}}
 };
-const docKey=(k,id)=>`dnd2-${k}:${id}`;
-const metaKey=(k,id)=>`dnd2-meta-${k}:${id}`;
+const docKey=(k,id)=>`${NS}-${k}:${id}`;
+const metaKey=(k,id)=>`${NS}-meta-${k}:${id}`;
 function getMeta(k,id){return LS.get(metaKey(k,id),{rev:null,base:null,pending:false,owner:null})}
 function setMeta(k,id,m){LS.set(metaKey(k,id),m)}
 function fillChar(d){const o=migrate(merge(clone(BLANK_CHAR),d||{})); delete o.town; return o}
 function fillTown(d){return merge(clone(BLANK_TOWN),d||{})}
 function docJ(doc){return JSON.stringify({...doc,updatedAt:0})}
-function persistIds(){LS.set("dnd2-ids",{c:Object.keys(CH),t:Object.keys(TW)}); LS.set("dnd2-active",{c:activeC,t:activeT})}
+function persistIds(){LS.set(NS+"-ids",{c:Object.keys(CH),t:Object.keys(TW)}); LS.set(NS+"-active",{c:activeC,t:activeT})}
 function persistDoc(k,id){LS.set(docKey(k,id),(k==="c"?CH:TW)[id])}
 function attachTown(){ if(S) Object.defineProperty(S,"town",{get:()=>T,enumerable:false,configurable:true}); }
 function activate(){
@@ -818,14 +834,14 @@ function pickActive(){
   activate(); persistIds();
 }
 function bootLocal(){
-  const ids=LS.get("dnd2-ids",null);
+  const ids=LS.get(NS+"-ids",null);
   if(ids){
     (ids.c||[]).forEach(id=>{const d=LS.get(docKey("c",id),null); if(d){CH[id]=fillChar(d); lastJ["c"+id]=docJ(CH[id]);}});
     (ids.t||[]).forEach(id=>{const d=LS.get(docKey("t",id),null); if(d){TW[id]=fillTown(d); lastJ["t"+id]=docJ(TW[id]);}});
-    const a=LS.get("dnd2-active",{}); activeC=a.c; activeT=a.t;
+    const a=LS.get(NS+"-active",{}); activeC=a.c; activeT=a.t;
   } else {
     // upgrade from the single-sheet version
-    const raw=LS.get("dnd-sheet-v1",null);
+    const raw=TOWN_ONLY?null:LS.get("dnd-sheet-v1",null);
     if(raw){
       const old=migrate(merge(clone(DEFAULT),raw));
       const sess=LS.get("dnd-sync-auth",null);
@@ -839,7 +855,7 @@ function bootLocal(){
       setMeta("c",cid,{rev:null,base:null,pending:true,owner:u||null});
       setMeta("t",tid,{rev:null,base:null,pending:true,owner:u||null});
       activeC=cid; activeT=tid;
-      if(u) LS.set("dnd2-account",u);
+      if(u) LS.set(NS+"-account",u);
     }
   }
   pickActive();
@@ -892,7 +908,7 @@ function merge3(b,l,r,localNewer,path){
 const CFG=Object.assign({url:"",key:""},window.SYNC_CONFIG||{});
 try{const o=JSON.parse(localStorage.getItem("dnd-sync-config")||"null"); if(o&&o.url&&o.key){CFG.url=o.url;CFG.key=o.key;}}catch(e){}
 let sb=null, session=null, syncing=false, syncAgain=false, needsRender=false, installEvt=null, authErr="", syncErr="", firstSyncDone=false;
-let lastSynced=LS.get("dnd-sync-time",0);
+let lastSynced=LS.get(NS+"-sync-time",0);
 const members={}; // townId -> [{user_id, role}]
 const OFFLINE_MSG="Offline: changes are saved on this device and will sync when you’re back online.";
 const timeout=ms=>new Promise((_,rej)=>setTimeout(()=>rej(new Error("The server took too long to answer")),ms));
@@ -901,7 +917,7 @@ const withTimeout=(p,ms=12000)=>Promise.race([p,timeout(ms)]);
 function initClient(){
   if(sb||!CFG.url||!CFG.key||!window.supabase) return;
   try{
-    sb=supabase.createClient(CFG.url,CFG.key,{auth:{persistSession:true,autoRefreshToken:true,storageKey:"dnd-sync-auth"}});
+    sb=supabase.createClient(CFG.url,CFG.key,{auth:{persistSession:true,autoRefreshToken:true,storageKey:TOWN_ONLY?"dndtown-auth":"dnd-sync-auth"}});
     sb.auth.getSession().then(({data})=>{session=data.session; uid=session?.user?.id||null; render(); paintSaveState();});
     sb.auth.onAuthStateChange((ev,s)=>{ session=s; uid=s?.user?.id||null; paintSaveState(); if(ev==="SIGNED_IN") setTimeout(()=>sync(),0); if(tab==="sync") render(); });
   }catch(e){ sb=null; syncErr="The project URL or key looks wrong."; }
@@ -985,21 +1001,23 @@ async function sync(manual){
   if(syncing){ syncAgain=true; return; }
   let s; try{ s=(await sb.auth.getSession()).data.session; }catch(e){ s=null; }
   session=s; uid=s?.user?.id||null; if(!s){ paintSaveState(); return; }
-  const acct=LS.get("dnd2-account",null);
+  const acct=LS.get(NS+"-account",null);
   if(acct&&acct!==uid) wipeLocal();
-  LS.set("dnd2-account",uid);
+  LS.set(NS+"-account",uid);
   syncing=true; syncAgain=false; syncErr=""; paintSaveState();
   try{
     await loadMembers();
-    const {data:cr,error:ce}=await withTimeout(sb.from("characters").select("id,owner,data,rev"));
-    if(ce) throw ce;
-    await syncKind("c",cr||[]);
+    if(!TOWN_ONLY){
+      const {data:cr,error:ce}=await withTimeout(sb.from("characters").select("id,owner,data,rev"));
+      if(ce) throw ce;
+      await syncKind("c",cr||[]);
+    }
     const {data:tr,error:te}=await withTimeout(sb.from("towns").select("id,owner,data,rev"));
     if(te) throw te;
     await syncKind("t",tr||[]);
     const wasC=activeC, wasT=activeT;
     pickActive();
-    lastSynced=Date.now(); LS.set("dnd-sync-time",lastSynced); firstSyncDone=true;
+    lastSynced=Date.now(); LS.set(NS+"-sync-time",lastSynced); firstSyncDone=true;
     const a=document.activeElement;
     if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)&&a.closest("main")&&wasC===activeC&&wasT===activeT){ needsRender=true; renderHeader(); } else render();
     if(manual) toast("Synced.");
@@ -1018,7 +1036,7 @@ async function check(){
   if(!s) return;
   if(anyPending()) return sync();
   try{
-    const [{data:c},{data:t}]=await Promise.all([sb.from("characters").select("id,rev"),sb.from("towns").select("id,rev")]);
+    const [{data:c},{data:t}]=await Promise.all([TOWN_ONLY?Promise.resolve({data:[]}):sb.from("characters").select("id,rev"),sb.from("towns").select("id,rev")]);
     const changed=(rows,k,docs)=>(rows||[]).some(r=>getMeta(k,r.id).rev!==r.rev)||(rows||[]).length!==Object.keys(docs).length;
     if(changed(c,"c",CH)||changed(t,"t",TW)) sync();
   }catch(e){}
@@ -1125,8 +1143,8 @@ function renderSync(){
       ${CFG.url?`<details style="margin-top:14px"><summary class="muted small">Project settings</summary><p class="small muted" style="word-break:break-all">${esc(CFG.url)}</p><button class="btn sm" data-a="clearCfg">Use different project settings</button></details>`:""}
     </section>
     <section class="card"><h2>Backup</h2>
-      <p class="muted small">Saves the open character and town to a file. Loading a backup adds it as a new character, so nothing gets overwritten.</p>
-      <div class="row"><button class="btn" data-a="export" ${S?"":"disabled"}>Save backup file</button><label class="btn">Load backup<input type="file" accept=".json,application/json" id="importFile" hidden></label></div>
+      <p class="muted small">${TOWN_ONLY?"Saves the open town to a file. Loading a backup adds it as a new town, so nothing gets overwritten.":"Saves the open character and town to a file. Loading a backup adds it as a new character, so nothing gets overwritten."}</p>
+      <div class="row"><button class="btn" data-a="export" ${(TOWN_ONLY?T:S)?"":"disabled"}>Save backup file</button><label class="btn">Load backup<input type="file" accept=".json,application/json" id="importFile" hidden></label></div>
       ${installEvt?`<button class="btn pri" data-a="install" style="margin-top:12px">Install as an app</button>`:""}
     </section></div>`;
 }

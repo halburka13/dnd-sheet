@@ -4,6 +4,7 @@ A static PWA hosted on GitHub Pages, with Supabase (Postgres + Auth) as the sync
 
 ## Files
 - `index.html`: the whole app (UI, local store, sync engine).
+- `town/`: the standalone Town manager, a second installable PWA at `/dnd-sheet/town/`. `town/index.html` is **generated** from `index.html` by `build-town.py` (it sets `window.APP_MODE="town"`, which hides the character tabs and syncs only towns). Edit `index.html`, then run `python3 build-town.py`.
 - `sw.js`: offline cache. App shell is stale-while-revalidate, so a deploy reaches devices on their second launch. Bump `CACHE` to force-clean old caches.
 - `config.js`: Supabase URL and publishable key (public by design, RLS does the protecting).
 - `supabase-setup.sql`: full schema, policies and triggers (already applied to the project).
@@ -22,6 +23,7 @@ A static PWA hosted on GitHub Pages, with Supabase (Postgres + Auth) as the sync
 - Offline-first: every document lives in `localStorage` (`dnd2-c:<id>`, `dnd2-t:<id>`) with metadata `{rev, base, pending, owner}`.
 - On sync, each doc is reconciled with a **three-way merge** (`base` = last synced copy, `local`, `remote`). Leaf conflicts resolve to the doc with the newer client `updatedAt`. Exceptions: `town.treasury` and `coins.*` add both sides' deltas, and `town.log` takes the union.
 - Writes are optimistic: `update ... where id = $1 and rev = $seen`, writing `rev + 1`. 0 rows updated means a concurrent write (re-sync) or a viewer without rights (adopt the remote copy).
+- The town app keeps its own local store (`dndtown-*` keys) and its own sign-in, so the two apps never step on each other on the same device. They meet in the database.
 - Polls `rev` every 20 s while visible, plus on `online` and `visibilitychange`. Realtime isn't used.
 
 ## Sharing a town with someone
