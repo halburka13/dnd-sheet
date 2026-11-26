@@ -1,7 +1,15 @@
 // Offline support: keeps a copy of the app on the device.
-const CACHE = "town-manager-v2";
+const CACHE = "town-manager-v3";
 const SHELL = ["./", "./index.html", "../config.js", "../supabase.js", "./manifest.webmanifest",
   "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png"];
+
+// A newer copy of the page was downloaded: tell open pages so they can offer a reload.
+const stamp = r => r.headers.get("etag") || r.headers.get("last-modified");
+const changed = (oldRes, newRes) => { const a = stamp(oldRes), b = stamp(newRes); return !!(a && b && a !== b); };
+const tellPages = () => {
+  const send = () => self.clients.matchAll({ type: "window" }).then(cs => cs.forEach(c => c.postMessage({ type: "update" })));
+  return send().then(() => new Promise(r => setTimeout(r, 3000))).then(send); // again later, in case the page wasn't ready yet
+};
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -28,8 +36,12 @@ self.addEventListener("fetch", e => {
   e.respondWith(caches.open(CACHE).then(async cache => {
     const key = req.mode === "navigate" ? "./index.html" : req;
     const hit = await cache.match(key, { ignoreSearch: true });
-    const net = fetch(req).then(res => {
-      if (res && res.ok) cache.put(key, res.clone());
+    const net = fetch(req).then(async res => {
+      if (res && res.ok) {
+        const fresh = res.clone();
+        await cache.put(key, res.clone());
+        if (hit && req.mode === "navigate" && changed(hit, fresh)) await tellPages();
+      }
       return res;
     }).catch(() => null);
     if (hit) { e.waitUntil(net); return hit; }

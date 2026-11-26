@@ -118,6 +118,14 @@ textarea.in{min-height:120px;resize:vertical}
 .feat:first-of-type{border-top:0}
 .feat .hd{display:flex;align-items:center;gap:8px}
 .feat .hd .in{font-weight:700}
+.feat .fn{flex:1;min-width:0;font-size:18px}
+.feat .fleft{font-size:14px;color:var(--muted);white-space:nowrap}
+.feat .fleft.neg{color:var(--blood)}
+details.feat summary{display:flex;align-items:center;gap:8px;cursor:pointer;min-height:40px;list-style:none}
+details.feat summary::-webkit-details-marker{display:none}
+details.feat summary::before{content:"›";font-size:22px;color:var(--muted);width:14px;transition:transform .15s}
+details.feat[open] summary::before{transform:rotate(90deg)}
+h3+.feat{border-top:0}
 
 /* spells */
 .casters{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:16px}
@@ -198,6 +206,7 @@ textarea.in{min-height:120px;resize:vertical}
     <div class="who" data-a="chars" role="button" tabindex="0" title="Switch character" style="cursor:pointer"><h1 id="hName"></h1><p id="hSub"></p></div>
     <div class="vitals" id="vitals"></div>
     <button id="syncPill" class="syncpill" data-a="resync" hidden></button>
+    <button id="updPill" class="syncpill" data-a="reloadApp" hidden>New version ready · tap to update</button>
     <div class="rests">
       <button class="btn" data-a="chars">Characters</button>
       <button class="btn" data-a="shortRest">Short rest</button>
@@ -314,6 +323,28 @@ function migrate(o){
 }
 const WIZ_CANTRIPS=["Acid Splash","Blade Ward","Booming Blade","Chill Touch","Control Flames","Create Bonfire","Dancing Lights","Fire Bolt","Friends","Frostbite","Green-Flame Blade","Gust","Infestation","Light","Lightning Lure","Mage Hand","Mending","Message","Mind Sliver","Minor Illusion","Mold Earth","Poison Spray","Prestidigitation","Ray of Frost","Shape Water","Shocking Grasp","Sword Burst","Thunderclap","Toll the Dead","True Strike"];
 function cfFeature(){let f=S.features.find(f=>f.name==="Cantrip Formulas");if(!f){f={name:"Cantrip Formulas",max:1,used:0,reset:"long",text:"After a long rest, swap one wizard cantrip you know for another cantrip from the wizard list."};S.features.push(f);}return f}
+function isLimited(f){return f.reset!=="none"&&Number(f.max)>0}
+function featEditModal(i){
+  const f=i>=0?S.features[i]:{name:"",max:1,used:0,reset:"none",text:""};
+  modal(`<h2>${i>=0?"Edit feature":"New feature"}</h2>
+    <label class="small muted">Name<input class="in" id="feName" value="${esc(f.name)}" style="margin:2px 0 8px;color:var(--ink)"></label>
+    <label class="small muted">Recharges<select class="in" id="feReset" style="margin:2px 0 8px">
+      ${[["none","Always on (no uses)"],["short","Short or long rest"],["long","Long rest"]].map(([v,l])=>`<option value="${v}" ${f.reset===v?"selected":""}>${l}</option>`).join("")}</select></label>
+    <label class="small muted">Number of uses (ignored if always on)<input class="in num" id="feMax" type="number" min="0" max="20" value="${Number(f.max)||1}" style="margin:2px 0 8px;display:block"></label>
+    <label class="small muted">What it does<textarea class="in" id="feText" rows="5" style="margin:2px 0 8px;color:var(--ink)">${esc(f.text)}</textarea></label>
+    <button class="btn pri" data-a="featSave" data-i="${i}" style="text-align:center">${i>=0?"Save":"Add feature"}</button>
+    ${i>=0?`<button class="btn dmg" data-a="del" data-k="features" data-i="${i}" style="text-align:center">Remove feature</button>`:""}`);
+  if(i<0) setTimeout(()=>document.getElementById("feName")?.focus(),50);
+}
+function featSave(i){
+  const name=document.getElementById("feName").value.trim()||"New feature";
+  const reset=document.getElementById("feReset").value;
+  const max=reset==="none"?0:Math.max(0,Math.min(20,Math.floor(Number(document.getElementById("feMax").value)||0)));
+  const text=document.getElementById("feText").value;
+  if(i>=0){ const f=S.features[i]; Object.assign(f,{name,reset,max,text}); f.used=Math.min(f.used||0,max); }
+  else S.features.push({name,max,used:0,reset,text});
+  closeModal(); save(); render(); toast(i>=0?"Feature saved.":"Feature added.");
+}
 function prepLimit(src){const so=S.sources[src];return Math.max(1,mod(S.abil[so.abil]||10)+Number(so.level||0))}
 function prepCount(src){return S.spells.filter(s=>s.src===src&&s.lvl>0&&s.prep).length}
 function isReady(s){return s.lvl===0||!S.sources[s.src]?.prepares||s.prep}
@@ -423,19 +454,18 @@ function renderCombat(){
   </section>
 
   <section class="card">
-    <h2>Features <button class="btn sm" data-a="add" data-k="features">Add</button></h2>
-    ${S.features.map((f,i)=>`<div class="feat">
-      <div class="hd">
-        <input class="in bare" data-b="features.${i}.name" value="${esc(f.name)}" style="flex:1">
-        ${f.max>0?`<div class="pips">${Array.from({length:f.max},(_,j)=>`<button class="pip ${j<f.max-f.used?"":"used"}" data-a="featUse" data-i="${i}" data-j="${j}" aria-label="Use"></button>`).join("")}</div>`:""}
-        <select class="in small" data-b="features.${i}.reset" style="width:auto" aria-label="Recharge">
-          ${["none","short","long"].map(r=>`<option value="${r}" ${f.reset===r?"selected":""}>${r==="none"?"Passive":r==="short"?"Short rest":"Long rest"}</option>`).join("")}
-        </select>
-        ${f.reset!=="none"?`<input class="in num" type="number" min="0" data-b="features.${i}.max" value="${f.max}" aria-label="Uses" style="width:56px">`:""}
-        <button class="x" data-a="del" data-k="features" data-i="${i}" aria-label="Remove">×</button>
-      </div>
-      <textarea class="in bare small muted" data-b="features.${i}.text" rows="2" style="min-height:0">${esc(f.text)}</textarea>
-    </div>`).join("")}
+    <h2>Features <button class="btn sm" data-a="featEdit" data-i="-1">Add</button></h2>
+    ${(()=>{const all=S.features.map((f,i)=>({...f,i})), lim=all.filter(isLimited), pas=all.filter(f=>!isLimited(f));
+      return `${lim.length?`<h3 style="margin-top:0">Limited uses</h3>${lim.map(f=>`<div class="feat">
+        <div class="hd"><strong class="fn">${esc(f.name)}</strong>
+          <span class="fleft ${f.max-f.used?"":"neg"}">${f.max-f.used}/${f.max} left · ${f.reset==="short"?"short rest":"long rest"}</span>
+          <button class="btn sm ghost" data-a="featEdit" data-i="${f.i}" aria-label="Edit ${esc(f.name)}">Edit</button></div>
+        <div class="pips" style="margin:6px 0">${Array.from({length:f.max},(_,j)=>`<button class="pip ${j<f.max-f.used?"":"used"}" data-a="featUse" data-i="${f.i}" data-j="${j}" aria-label="${j<f.max-f.used?"Use":"Get back"} ${esc(f.name)}"></button>`).join("")}</div>
+        ${f.text?`<div class="small muted">${esc(f.text)}</div>`:""}
+      </div>`).join("")}`:""}
+      ${pas.length?`<h3>Always on</h3>${pas.map(f=>`<details class="feat pas"><summary><strong class="fn">${esc(f.name)}</strong><button class="btn sm ghost" data-a="featEdit" data-i="${f.i}" aria-label="Edit ${esc(f.name)}">Edit</button></summary>
+        ${f.text?`<div class="small muted" style="margin-top:4px">${esc(f.text)}</div>`:`<div class="small muted">No description yet.</div>`}</details>`).join("")}`:""}
+      ${all.length?`<p class="muted small" style="margin-bottom:0">Tap a square to mark a use; tap a used one to get it back. Tap a name under “Always on” to read it.</p>`:`<p class="muted">No features yet. Add your first one.</p>`}`})()}
   </section>
   </div>`;
 }
@@ -770,6 +800,9 @@ document.addEventListener("click",e=>{
     case "toggleShield": S.shield=!S.shield; save(); render(); return;
     case "aura": { if(!S||!S.kin) return; const k=S.kin; const fly=k.aura&&/cyclonic/i.test(k.stance); k.aura=!k.aura; save(); render();
       toast(k.aura?(k.stance?`Aura on. Stance: ${k.stance}.`:"Aura on. No stance picked."):fly?"Aura off. Cyclonic Ascent ends, so you fall unless something holds you up.":"Aura off."); return; }
+    case "featEdit": e.preventDefault(); featEditModal(i); return;
+    case "featSave": featSave(i); return;
+    case "reloadApp": location.reload(); return;
     case "impUse": impUseModal(i); return;
     case "impConfirm": closeModal(); useImpulse(i,k); return;
     case "impConc": S.kin.impulses[i].c=!S.kin.impulses[i].c; save(); render(); return;
@@ -1283,7 +1316,11 @@ window.addEventListener("beforeinstallprompt",e=>{ e.preventDefault(); installEv
 setInterval(check,20000);
 
 bootLocal(); initClient(); render(); paintSaveState(); setTimeout(()=>sync(),300);
-if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+  // sw.js tells us when it downloaded a newer copy of the app than the one on screen
+  navigator.serviceWorker.addEventListener("message",e=>{ if(e.data&&e.data.type==="update") document.getElementById("updPill").hidden=false; });
+}
 </script>
 </body>
 </html>
