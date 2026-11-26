@@ -396,7 +396,7 @@ function renderHeader(){
     document.getElementById("tabs").innerHTML=[["town","Town"],["sync","Sync"]].map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" data-a="tab" data-k="${k}">${l}</button>`).join("");
     document.getElementById("hName").textContent=T?(T.name||"Unnamed town"):"Town manager";
     document.getElementById("hSub").textContent=T?`Turn ${T.turn} · Treasury ${fmt(T.treasury)} gp`:"Sign in to load your towns";
-    document.getElementById("vitals").innerHTML=`<a class="btn" href="../" target="_blank" rel="noopener">Character app</a>`;
+    document.getElementById("vitals").innerHTML=`<a class="btn" href="../index.html" target="_blank" rel="noopener">Character app</a>`;
     document.title=(T?T.name+" – ":"")+"Town manager";
     return;
   }

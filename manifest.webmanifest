@@ -1,9 +1,10 @@
 {
+  "id": "./",
   "name": "D&D Character Sheet",
   "short_name": "D&D Sheet",
   "description": "D&D 5e character sheets and town manager that work offline.",
-  "start_url": "./",
-  "scope": "./",
+  "start_url": "./index.html",
+  "scope": "./index.html",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#17141F",
