@@ -23,7 +23,7 @@ A static PWA hosted on GitHub Pages, with Supabase (Postgres + Auth) as the sync
 - Offline-first: every document lives in `localStorage` (`dnd2-c:<id>`, `dnd2-t:<id>`) with metadata `{rev, base, pending, owner}`.
 - On sync, each doc is reconciled with a **three-way merge** (`base` = last synced copy, `local`, `remote`). Leaf conflicts resolve to the doc with the newer client `updatedAt`. Exceptions: `town.treasury` and `coins.*` add both sides' deltas, and `town.log` takes the union.
 - Writes are optimistic: `update ... where id = $1 and rev = $seen`, writing `rev + 1`. 0 rows updated means a concurrent write (re-sync) or a viewer without rights (adopt the remote copy).
-- The town app keeps its own local store (`dndtown-*` keys) and its own sign-in, so the two apps never step on each other on the same device. They meet in the database.
+- The two apps share one sign-in (auth storageKey `dnd-sync-auth`) and one local copy of each town (`dnd2-t:*`). A `storage` event listener picks up the other app's town edits instantly on the same device. Characters stay character-app only.
 - Polls `rev` every 20 s while visible, plus on `online` and `visibilitychange`. Realtime isn't used.
 
 ## Sharing a town with someone

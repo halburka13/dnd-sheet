@@ -22,8 +22,9 @@ Sync backend: Supabase project **`jxhmfqjrlcwkvunzyuwl`** (Postgres + Auth, emai
 - `sw.js` / `town/sw.js`: app shell is stale-while-revalidate, so devices get a deploy on their **second** launch. The main SW must ignore `/town` paths and only answer navigations for `""` or `index.html` relative to its scope. That was a real bug (v4).
 
 ## Local storage and sync
-- Keys use namespace `NS` = `dnd2` (character app) or `dndtown` (town app). They're separate on purpose, and so are the auth storage keys (`dnd-sync-auth` / `dndtown-auth`), so the two apps don't fight over refresh tokens.
-- Per doc: `${NS}-c:<id>` / `${NS}-t:<id>` plus `${NS}-meta-{c|t}:<id>` = `{rev, base, pending, owner}`. `${NS}-account` holds the last signed-in uid. If a different user signs in, local docs are wiped.
+- Keys use namespace `NS` = `dnd2` (character app) or `dndtown` (town app) for app-specific state (`-ids`, `-active`, `-account`, `-sync-time`). **Towns are shared:** both apps store them under `TNS` = `dnd2` (`dnd2-t:<id>`, `dnd2-meta-t:<id>`, id list in `dnd2-town-ids`), and a `storage` event listener reloads a town when the other app changes it, so edits show instantly on the same device. `moveOldTownCopies()` migrates the town app's old `dndtown-t:*` copies once (newer `updatedAt` wins).
+- **One sign-in:** both apps use auth storageKey `dnd-sync-auth` (the old `dndtown-auth` is moved over once). supabase-js coordinates pages sharing a storageKey with navigator locks + BroadcastChannel, so refresh tokens don't clash.
+- Per doc: `${NS}-c:<id>` / `dnd2-t:<id>` plus the matching `-meta-` key = `{rev, base, pending, owner}`. `${NS}-account` holds the last signed-in uid. If a different user signs in, local docs are wiped.
 - Legacy v1 (`dnd-sheet-v1` single sheet) is migrated in `bootLocal()` to character id = user id and town id = user id. The server side was migrated the same way.
 - Sync = per-doc **three-way merge** (`merge3(base, local, remote)`). Leaf conflicts resolve to the newer client `updatedAt`. `town.treasury` and `coins.*` add both sides' deltas. `town.log` takes the union.
 - Writes are optimistic: `update … eq(id) eq(rev, seen)` writing `rev+1`. 0 rows means a concurrent write (retry) or a viewer without rights (adopt the remote copy).

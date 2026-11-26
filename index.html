@@ -68,6 +68,7 @@ main{max-width:1200px;margin:0 auto;padding:16px}
 .btn.pri{background:var(--hex);border-color:var(--hex);color:var(--panel)}
 .btn.dmg{background:var(--blood);border-color:var(--blood);color:#fff}
 .btn.gold{background:var(--gold);border-color:var(--gold);color:var(--panel)}
+a.btn{text-decoration:none;color:inherit;display:inline-flex;align-items:center}
 .btn.sm{min-height:36px;padding:5px 10px;font-size:15px}
 .btn.ghost{background:none}
 .x{background:none;border:0;color:var(--muted);font-size:20px;min-width:36px;min-height:36px;border-radius:8px}
@@ -126,6 +127,10 @@ details.feat summary::-webkit-details-marker{display:none}
 details.feat summary::before{content:"›";font-size:22px;color:var(--muted);width:14px;transition:transform .15s}
 details.feat[open] summary::before{transform:rotate(90deg)}
 h3+.feat{border-top:0}
+.fgrid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+.fcard{padding:12px 14px}
+.fcard .hd{display:flex;align-items:center;gap:8px}
+.fcard .fn{flex:1;min-width:0;font-size:18px}
 
 /* spells */
 .casters{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:16px}
@@ -323,6 +328,28 @@ function migrate(o){
 const WIZ_CANTRIPS=["Acid Splash","Blade Ward","Booming Blade","Chill Touch","Control Flames","Create Bonfire","Dancing Lights","Fire Bolt","Friends","Frostbite","Green-Flame Blade","Gust","Infestation","Light","Lightning Lure","Mage Hand","Mending","Message","Mind Sliver","Minor Illusion","Mold Earth","Poison Spray","Prestidigitation","Ray of Frost","Shape Water","Shocking Grasp","Sword Burst","Thunderclap","Toll the Dead","True Strike"];
 function cfFeature(){let f=S.features.find(f=>f.name==="Cantrip Formulas");if(!f){f={name:"Cantrip Formulas",max:1,used:0,reset:"long",text:"After a long rest, swap one wizard cantrip you know for another cantrip from the wizard list."};S.features.push(f);}return f}
 function isLimited(f){return f.reset!=="none"&&Number(f.max)>0}
+function featPips(f){return Array.from({length:f.max},(_,j)=>`<button class="pip ${j<f.max-f.used?"":"used"}" data-a="featUse" data-i="${f.i}" data-j="${j}" aria-label="${j<f.max-f.used?"Use":"Get back"} ${esc(f.name)}"></button>`).join("")}
+let featFilter="all", featSearch="";
+function renderFeatures(){
+  const all=S.features.map((f,i)=>({...f,i}));
+  const q=featSearch.trim().toLowerCase();
+  const shown=all.filter(f=>(featFilter==="all"||(featFilter==="limited")===isLimited(f))&&(!q||(f.name+" "+f.text).toLowerCase().includes(q))).sort((a,b)=>isLimited(b)-isLimited(a));
+  const chip=(k,l,n)=>`<button class="chip ${featFilter===k?"on":""}" style="${featFilter===k?"background:var(--hexSoft);color:var(--hex);border-color:var(--hex)":""}" data-a="featFilter" data-k="${k}">${l} (${n})</button>`;
+  return `<section class="card" style="margin-bottom:16px">
+    <h2>Features <button class="btn sm pri" data-a="featEdit" data-i="-1">Add feature</button></h2>
+    <div class="row">
+      <div class="chips">${chip("all","All",all.length)}${chip("limited","Limited uses",all.filter(isLimited).length)}${chip("passive","Always on",all.filter(f=>!isLimited(f)).length)}</div>
+      <input class="in" id="featSearch" type="search" placeholder="Search features" value="${esc(featSearch)}" style="flex:1;min-width:180px" aria-label="Search features">
+    </div>
+  </section>
+  ${shown.length?`<div class="fgrid">${shown.map(f=>`<section class="card fcard">
+    <div class="hd"><strong class="fn">${esc(f.name)}</strong><button class="btn sm ghost" data-a="featEdit" data-i="${f.i}" aria-label="Edit ${esc(f.name)}">Edit</button></div>
+    <div class="row small" style="margin:4px 0 6px"><span class="tag ${isLimited(f)?"on":""}" style="min-height:0">${isLimited(f)?(f.reset==="short"?"Short rest":"Long rest"):"Always on"}</span>
+      ${isLimited(f)?`<span class="fleft ${f.max-f.used?"":"neg"}">${f.max-f.used}/${f.max} left</span>`:""}</div>
+    ${isLimited(f)?`<div class="pips" style="margin-bottom:8px">${featPips(f)}</div>`:""}
+    <div class="small muted">${f.text?esc(f.text):"No description yet. Tap Edit to add one."}</div>
+  </section>`).join("")}</div>`:`<section class="card"><p class="muted" style="margin:0">${all.length?"Nothing matches.":"No features yet. Add your first one."}</p></section>`}`;
+}
 function featEditModal(i){
   const f=i>=0?S.features[i]:{name:"",max:1,used:0,reset:"none",text:""};
   modal(`<h2>${i>=0?"Edit feature":"New feature"}</h2>
@@ -368,7 +395,7 @@ function renderHeader(){
     document.getElementById("tabs").innerHTML=[["town","Town"],["sync","Sync"]].map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" data-a="tab" data-k="${k}">${l}</button>`).join("");
     document.getElementById("hName").textContent=T?(T.name||"Unnamed town"):"Town manager";
     document.getElementById("hSub").textContent=T?`Turn ${T.turn} · Treasury ${fmt(T.treasury)} gp`:"Sign in to load your towns";
-    document.getElementById("vitals").innerHTML="";
+    document.getElementById("vitals").innerHTML=`<a class="btn" href="../" target="_blank" rel="noopener">Character app</a>`;
     document.title=(T?T.name+" – ":"")+"Town manager";
     return;
   }
@@ -392,6 +419,7 @@ function renderHeader(){
 function tabList(){
   const t=[["combat","Combat"]];
   if(S&&S.kin) t.push(["impulses","Impulses"]);
+  t.push(["features","Features"]);
   if(!S||!S.kin||S.spells.length||Object.keys(S.sources).length) t.push(["spells","Spells"]);
   t.push(["character","Character"],["inventory","Inventory"],["town","Town"],["notes","Notes"],["sync","Sync"]);
   return t;
@@ -453,18 +481,12 @@ function renderCombat(){
   </section>
 
   <section class="card">
-    <h2>Features <button class="btn sm" data-a="featEdit" data-i="-1">Add</button></h2>
-    ${(()=>{const all=S.features.map((f,i)=>({...f,i})), lim=all.filter(isLimited), pas=all.filter(f=>!isLimited(f));
-      return `${lim.length?`<h3 style="margin-top:0">Limited uses</h3>${lim.map(f=>`<div class="feat">
-        <div class="hd"><strong class="fn">${esc(f.name)}</strong>
-          <span class="fleft ${f.max-f.used?"":"neg"}">${f.max-f.used}/${f.max} left · ${f.reset==="short"?"short rest":"long rest"}</span>
-          <button class="btn sm ghost" data-a="featEdit" data-i="${f.i}" aria-label="Edit ${esc(f.name)}">Edit</button></div>
-        <div class="pips" style="margin:6px 0">${Array.from({length:f.max},(_,j)=>`<button class="pip ${j<f.max-f.used?"":"used"}" data-a="featUse" data-i="${f.i}" data-j="${j}" aria-label="${j<f.max-f.used?"Use":"Get back"} ${esc(f.name)}"></button>`).join("")}</div>
-        ${f.text?`<div class="small muted">${esc(f.text)}</div>`:""}
-      </div>`).join("")}`:""}
-      ${pas.length?`<h3>Always on</h3>${pas.map(f=>`<details class="feat pas"><summary><strong class="fn">${esc(f.name)}</strong><button class="btn sm ghost" data-a="featEdit" data-i="${f.i}" aria-label="Edit ${esc(f.name)}">Edit</button></summary>
-        ${f.text?`<div class="small muted" style="margin-top:4px">${esc(f.text)}</div>`:`<div class="small muted">No description yet.</div>`}</details>`).join("")}`:""}
-      ${all.length?`<p class="muted small" style="margin-bottom:0">Tap a square to mark a use; tap a used one to get it back. Tap a name under “Always on” to read it.</p>`:`<p class="muted">No features yet. Add your first one.</p>`}`})()}
+    <h2>Limited uses <button class="btn sm" data-a="tab" data-k="features">All features</button></h2>
+    ${(()=>{const lim=S.features.map((f,i)=>({...f,i})).filter(isLimited);
+      return lim.length?lim.map(f=>`<div class="feat">
+        <div class="hd"><strong class="fn">${esc(f.name)}</strong><span class="fleft ${f.max-f.used?"":"neg"}">${f.max-f.used}/${f.max} · ${f.reset==="short"?"short rest":"long rest"}</span></div>
+        <div class="pips" style="margin-top:6px">${featPips(f)}</div>
+      </div>`).join(""):`<p class="muted">No features with limited uses. The Features tab has the rest.</p>`})()}
   </section>
   </div>`;
 }
@@ -734,7 +756,7 @@ function render(){
   const y=window.scrollY;
   const m=document.getElementById("main");
   if(!S&&!["town","sync"].includes(tab)){ m.innerHTML=renderNoChar(); window.scrollTo(0,y); return; }
-  m.innerHTML={combat:renderCombat,impulses:renderImpulses,spells:renderSpells,character:renderCharacter,inventory:renderInventory,town:renderTown,notes:renderNotes,sync:renderSync}[tab]();
+  m.innerHTML={combat:renderCombat,features:renderFeatures,impulses:renderImpulses,spells:renderSpells,character:renderCharacter,inventory:renderInventory,town:renderTown,notes:renderNotes,sync:renderSync}[tab]();
   window.scrollTo(0,y);
 }
 
@@ -801,6 +823,7 @@ document.addEventListener("click",e=>{
       toast(k.aura?(k.stance?`Aura on. Stance: ${k.stance}.`:"Aura on. No stance picked."):fly?"Aura off. Cyclonic Ascent ends, so you fall unless something holds you up.":"Aura off."); return; }
     case "featEdit": e.preventDefault(); featEditModal(i); return;
     case "featSave": featSave(i); return;
+    case "featFilter": featFilter=k; render(); return;
     case "reloadApp": location.reload(); return;
     case "impUse": impUseModal(i); return;
     case "impConfirm": closeModal(); useImpulse(i,k); return;
@@ -892,6 +915,7 @@ document.addEventListener("click",e=>{
 });
 
 document.addEventListener("input",e=>{
+  if(e.target.id==="featSearch"){ featSearch=e.target.value; render(); const el=document.getElementById("featSearch"); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } return; }
   const p=e.target.dataset?.b; if(!p) return;
   let v=e.target.value; if(e.target.type==="number") v=v===""?0:Number(v); if(e.target.type==="checkbox") v=e.target.checked;
   setP(p,v); save(); if(p==="name"||p==="race"||p==="classes"||(TOWN_ONLY&&p.startsWith("town."))) renderHeader();
@@ -970,14 +994,54 @@ const LS={
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}},
   del(k){try{localStorage.removeItem(k)}catch(e){}}
 };
-const docKey=(k,id)=>`${NS}-${k}:${id}`;
-const metaKey=(k,id)=>`${NS}-meta-${k}:${id}`;
+// Towns live under one shared prefix so the character app and the town app use the same copy on a device.
+const TNS="dnd2", TOWN_IDS=TNS+"-town-ids";
+const docKey=(k,id)=>`${k==="t"?TNS:NS}-${k}:${id}`;
+const metaKey=(k,id)=>`${k==="t"?TNS:NS}-meta-${k}:${id}`;
 function getMeta(k,id){return LS.get(metaKey(k,id),{rev:null,base:null,pending:false,owner:null})}
 function setMeta(k,id,m){LS.set(metaKey(k,id),m)}
 function fillChar(d){const o=migrate(merge(clone(BLANK_CHAR),d||{})); delete o.town; return o}
 function fillTown(d){return merge(clone(BLANK_TOWN),d||{})}
 function docJ(doc){return JSON.stringify({...doc,updatedAt:0})}
-function persistIds(){LS.set(NS+"-ids",{c:Object.keys(CH),t:Object.keys(TW)}); LS.set(NS+"-active",{c:activeC,t:activeT})}
+function persistIds(){LS.set(NS+"-ids",{c:Object.keys(CH),t:Object.keys(TW)}); LS.set(TOWN_IDS,Object.keys(TW)); LS.set(NS+"-active",{c:activeC,t:activeT})}
+/* One-time move of the town app's old private town copies (dndtown-*) into the shared store. Keeps the newer copy. */
+function moveOldTownCopies(){
+  const old=LS.get("dndtown-ids",null); if(!old||!(old.t||[]).length) return [];
+  const moved=[];
+  old.t.forEach(id=>{
+    const od=LS.get(`dndtown-t:${id}`,null), om=LS.get(`dndtown-meta-t:${id}`,null);
+    if(od){ const cur=LS.get(docKey("t",id),null);
+      if(!cur||(od.updatedAt||0)>(cur.updatedAt||0)){ LS.set(docKey("t",id),od); if(om) setMeta("t",id,om); }
+      moved.push(id); }
+    LS.del(`dndtown-t:${id}`); LS.del(`dndtown-meta-t:${id}`);
+  });
+  LS.set("dndtown-ids",{c:old.c||[],t:[]});
+  return moved;
+}
+function loadTownIds(){
+  const moved=moveOldTownCopies();
+  const shared=LS.get(TOWN_IDS,null)||(LS.get(NS+"-ids",{}).t)||[];
+  return [...new Set([...shared,...moved])];
+}
+/* The other app (or another tab) changed a town on this device: pick it up right away. */
+window.addEventListener("storage",e=>{
+  if(!e.key) return;
+  let changed=false;
+  if(e.key===TOWN_IDS){
+    const ids=LS.get(TOWN_IDS,[]);
+    ids.forEach(id=>{ if(!TW[id]){ const d=LS.get(docKey("t",id),null); if(d){ TW[id]=fillTown(d); lastJ["t"+id]=docJ(TW[id]); changed=true; } } });
+    Object.keys(TW).forEach(id=>{ if(!ids.includes(id)){ delete TW[id]; changed=true; } });
+  } else if(e.key.startsWith(TNS+"-t:")){
+    const id=e.key.slice((TNS+"-t:").length);
+    if(e.newValue===null){ if(TW[id]){ delete TW[id]; changed=true; } }
+    else { try{ const d=fillTown(JSON.parse(e.newValue)); if(docJ(d)!==lastJ["t"+id]){ TW[id]=d; lastJ["t"+id]=docJ(d); changed=true; } }catch(err){} }
+  }
+  if(!changed) return;
+  if(!activeT||!TW[activeT]){ const t=Object.keys(TW); activeT=t.length?t[0]:null; }
+  activate(); paintSaveState();
+  const a=document.activeElement;
+  if(a&&a.closest&&a.closest("main")&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)){ needsRender=true; renderHeader(); } else render();
+});
 function persistDoc(k,id){LS.set(docKey(k,id),(k==="c"?CH:TW)[id])}
 function attachTown(){ if(S) Object.defineProperty(S,"town",{get:()=>T,enumerable:false,configurable:true}); }
 function activate(){
@@ -995,7 +1059,6 @@ function bootLocal(){
   const ids=LS.get(NS+"-ids",null);
   if(ids){
     (ids.c||[]).forEach(id=>{const d=LS.get(docKey("c",id),null); if(d){CH[id]=fillChar(d); lastJ["c"+id]=docJ(CH[id]);}});
-    (ids.t||[]).forEach(id=>{const d=LS.get(docKey("t",id),null); if(d){TW[id]=fillTown(d); lastJ["t"+id]=docJ(TW[id]);}});
     const a=LS.get(NS+"-active",{}); activeC=a.c; activeT=a.t;
   } else {
     // upgrade from the single-sheet version
@@ -1016,6 +1079,7 @@ function bootLocal(){
       if(u) LS.set(NS+"-account",u);
     }
   }
+  loadTownIds().forEach(id=>{ if(TW[id]) return; const d=LS.get(docKey("t",id),null); if(d){TW[id]=fillTown(d); lastJ["t"+id]=docJ(TW[id]);} });
   pickActive();
 }
 
@@ -1075,7 +1139,9 @@ const withTimeout=(p,ms=12000)=>Promise.race([p,timeout(ms)]);
 function initClient(){
   if(sb||!CFG.url||!CFG.key||!window.supabase) return;
   try{
-    sb=supabase.createClient(CFG.url,CFG.key,{auth:{persistSession:true,autoRefreshToken:true,storageKey:TOWN_ONLY?"dndtown-auth":"dnd-sync-auth"}});
+    // Both apps share one sign-in. supabase-js coordinates pages that use the same storageKey (locks + BroadcastChannel).
+    try{ if(!localStorage.getItem("dnd-sync-auth")&&localStorage.getItem("dndtown-auth")) localStorage.setItem("dnd-sync-auth",localStorage.getItem("dndtown-auth")); localStorage.removeItem("dndtown-auth"); }catch(e){}
+    sb=supabase.createClient(CFG.url,CFG.key,{auth:{persistSession:true,autoRefreshToken:true,storageKey:"dnd-sync-auth"}});
     sb.auth.getSession().then(({data})=>{session=data.session; uid=session?.user?.id||null; render(); paintSaveState();});
     sb.auth.onAuthStateChange((ev,s)=>{ session=s; uid=s?.user?.id||null; paintSaveState(); if(ev==="SIGNED_IN") setTimeout(()=>sync(),0); if(tab==="sync") render(); });
   }catch(e){ sb=null; syncErr="The project URL or key looks wrong."; }
@@ -1250,6 +1316,7 @@ function renderTownBar(){
     ${shared?`<span class="tag on">Shared with you${role==="viewer"?" (view only)":""}</span>`:""}
     <button class="btn sm" data-a="newTown">New town</button>
     ${activeT&&role==="owner"&&session?`<button class="btn sm" data-a="townShare">Share</button>`:""}
+    ${TOWN_ONLY?"":`<a class="btn sm" href="./town/" target="_blank" rel="noopener">Open town app</a>`}
   </div></section>`;
 }
 function shareModal(){
