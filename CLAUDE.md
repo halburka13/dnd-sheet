@@ -43,7 +43,7 @@ Sync backend: Supabase project **`jxhmfqjrlcwkvunzyuwl`** (Postgres + Auth, emai
 - **Deploy:** commit and push to `main`. GitHub Pages publishes in about 1 minute.
 - **When to bump caches:** bump `CACHE` in `sw.js` (and `town/sw.js`) whenever the service worker logic changes or you need devices to drop stale files.
 - **After a deploy, tell the user:** open the app twice on each device.
-- **Before pushing,** show the user the diff summary and get a yes.
+- **Pushing:** the user wants finished, tested changes committed and pushed to `main` without asking first. Summarize what was pushed afterwards.
 
 ## Conventions
 - Keep everything in single files with no bundler. External scripts are only allowed if vendored.

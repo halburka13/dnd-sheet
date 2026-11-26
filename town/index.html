@@ -184,6 +184,16 @@ h3+.feat{border-top:0}
 .opts h3{margin:10px 0 4px}
 .obtns{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px}
 .btn.imp-ov{border-color:var(--blood)}
+#rollbox{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(72px + env(safe-area-inset-bottom,0px));z-index:55;width:min(420px,92vw);background:var(--panel);border:2px solid var(--violet);border-radius:16px;padding:10px 14px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+.rb-hd{display:flex;align-items:center;gap:8px;font-family:var(--display);font-size:20px} .rb-hd strong{flex:1}
+.rb-line{display:grid;grid-template-columns:110px 70px 1fr;align-items:center;gap:8px;padding:4px 0;border-top:1px solid var(--line)}
+.rb-line b{font-family:var(--display);font-size:30px;line-height:1.1;text-align:center}
+.rb-lbl{font-size:14px;color:var(--muted)} .rb-sub{font-size:13px;color:var(--muted)}
+.rb-line.crit b{color:var(--gold)} .rb-line.miss b{color:var(--blood)}
+.rb-note{font-size:14px;color:var(--gold);border-top:1px solid var(--line);padding-top:4px;margin-top:2px}
+.rb-foot{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:4px}
+button.v.rollv{background:none;border:1px solid var(--line);border-radius:8px;min-height:36px;min-width:52px;font-family:var(--display);font-size:20px}
+.ab .m.rollv{background:none;border:0;width:100%;cursor:pointer}
 .kinbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 12px;margin-bottom:10px;border-radius:12px;background:var(--panel2);border:2px solid var(--line)}
 .kinbar.on{background:var(--goldSoft);border-color:var(--gold)}
 .kb-state{min-width:130px} .kb-state b{display:block;font-family:var(--display);font-size:22px;line-height:1.1} .kb-state span{font-size:13px;color:var(--muted)}
@@ -244,6 +254,7 @@ h3+.feat{border-top:0}
 </header>
 <main id="main"></main>
 <div id="toast" role="status" aria-live="polite"></div>
+<div id="rollbox" role="status" aria-live="polite" hidden></div>
 <div id="modalRoot"></div>
 
 <script>
@@ -411,8 +422,82 @@ function bsFeature(){return S&&S.features.find(f=>/^bladesong/i.test(f.name||"")
 function bsBonus(){return Math.max(1,mod(S.abil.int))}
 function acNow(){return Number(S.ac)+(S.shield?5:0)+(S.bladesong?bsBonus():0)}
 function speedNow(){return Number(S.speed)+(S.bladesong?10:0)}
-function toast(msg,ms=2600){const t=document.getElementById("toast");if(spendWarn){msg=spendWarn+msg;spendWarn="";ms=Math.max(ms,4500);}spentTwice=[];t.textContent=msg;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),ms)}
+let rollShownAt=0;
+function toast(msg,ms=2600){const t=document.getElementById("toast");if(spendWarn){msg=spendWarn+msg;spendWarn="";ms=Math.max(ms,4500);}spentTwice=[];
+  // Right after a roll, put the message inside the roll card instead of a second popup
+  const rb=document.getElementById("rollbox"); if(msg&&rb&&!rb.hidden&&Date.now()-rollShownAt<1500){ const n=document.createElement("div"); n.className="rb-note"; n.textContent=msg; rb.appendChild(n); return; }
+  if(!msg) return;t.textContent=msg;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),ms)}
 function roll(d){return 1+Math.floor(Math.random()*d)}
+
+/* ---------- dice ---------- */
+let rollLog=[]; // recent rolls on this device only (not synced)
+function rollMode(){return (S&&S.rollMode)||"normal"}
+function d20(mode){ mode=mode||rollMode(); const a=roll(20); if(mode==="normal") return {n:a,txt:`${a}`}; const b=roll(20); const n=mode==="adv"?Math.max(a,b):Math.min(a,b); return {n,txt:`${a} / ${b}, ${mode==="adv"?"advantage":"disadvantage"}`}; }
+/* "2d6+5 fire + 1d8 thunder" -> dice terms and a flat bonus. Plain numbers without a + or - (like "60 ft") are ignored. */
+function parseDice(str){
+  const s=String(str||"").replace(/[−–]/g,"-"); const dice=[]; let flat=0, m;
+  const re=/([+-]?)\s*(\d*)d(\d+)|([+-])\s*(\d+)(?!\d|\s*d\d)/gi;
+  while((m=re.exec(s))){ if(m[3]) dice.push({n:Number(m[2]||1),neg:m[1]==="-",d:Number(m[3])}); else flat+=(m[4]==="-"?-1:1)*Number(m[5]); }
+  return {dice,flat};
+}
+function rollDamage(str,crit){
+  const {dice,flat}=parseDice(str); if(!dice.length) return null;
+  let total=flat; const parts=[];
+  dice.forEach(t=>{ const cnt=t.n*(crit?2:1); const rs=Array.from({length:cnt},()=>roll(t.d)); const sum=rs.reduce((a,b)=>a+b,0); total+=t.neg?-sum:sum; parts.push(`${t.neg?"−":""}${cnt}d${t.d} (${rs.join(", ")})`); });
+  if(flat) parts.push(sgn(flat));
+  return {total:Math.max(0,total),txt:parts.join(" ")};
+}
+/* Shows a roll card at the bottom of the screen and keeps it in the recent list. lines: [{label, big, sub, cls}] */
+function showRoll(title,lines,foot){
+  const box=document.getElementById("rollbox");
+  rollLog.unshift({title,lines,foot,t:Date.now()}); rollLog=rollLog.slice(0,8);
+  box.innerHTML=`<div class="rb-hd"><strong>${esc(title)}</strong><button class="x" data-a="rollClose" aria-label="Close roll">×</button></div>
+    ${lines.map(l=>`<div class="rb-line ${l.cls||""}"><span class="rb-lbl">${esc(l.label)}</span><b>${esc(l.big)}</b><span class="rb-sub">${esc(l.sub||"")}</span></div>`).join("")}
+    ${foot?`<div class="rb-foot">${esc(foot)}</div>`:""}`;
+  box.hidden=false; rollShownAt=Date.now();
+  const list=document.getElementById("rollRecent"); if(list) list.innerHTML=recentRollsHtml();
+}
+function recentRollsHtml(){ return rollLog.length?rollLog.map(r=>`<div class="small"><strong>${esc(r.title)}</strong> <span class="muted">${esc(r.lines.map(l=>`${l.label} ${l.big}`).join(" · "))}</span></div>`).join(""):`<span class="muted small">No rolls yet.</span>`; }
+function meleeWeapon(){ return S.attacks.find(a=>!/weapon/i.test(a.dmg||"")&&!S.spells.some(s=>s.lvl===0&&s.name.toLowerCase()===String(a.name).toLowerCase())&&/melee|5 ft|hammer|sword|axe|mace|dagger|rapier|spear|blade|staff|club/i.test((a.name||"")+" "+(a.note||""))) }
+function gatherPending(){ return !!(inCombat()&&S.combat.gather) }
+/* Attack roll(s) for an attack line: d20 + bonus, then damage (crit doubles dice). Handles "×2 beams" and "weapon + 1d8". */
+function rollAttack(a){
+  const bonus=parseInt(String(a.bonus||"0").replace(/[^\d+-]/g,""),10)||0;
+  const beams=Number((String(a.dmg).match(/[×x]\s*(\d+)\s*beams?/i)||[])[1])||1;
+  let dmgStr=String(a.dmg||"").replace(/[×x]\s*\d+\s*beams?/i,"");
+  let foot=a.dmg;
+  if(/weapon/i.test(dmgStr)){ const w=meleeWeapon(); if(w){ dmgStr=w.dmg+" "+dmgStr.replace(/weapon/i,""); foot=`${w.name} ${w.dmg} plus ${dmgStr.replace(w.dmg,"").trim()}`; } }
+  const lines=[];
+  for(let b=0;b<beams;b++){
+    const r=d20(), crit=r.n===20, nat1=r.n===1;
+    lines.push({label:beams>1?`Beam ${b+1} to hit`:"To hit",big:String(r.n+bonus),sub:`d20 ${r.txt} ${sgn(bonus)}${crit?" · CRITICAL":nat1?" · natural 1, miss":""}`,cls:crit?"crit":nat1?"miss":""});
+    const dm=rollDamage(dmgStr,crit);
+    if(dm){ let sub=dm.txt;
+      if(b===0&&isBlast(a)&&gatherPending()){ const g=rollDamage(S.kin.gather,crit); if(g){ dm.total+=g.total; sub+=` + Gather Power ${g.txt}`; } S.combat.gather=false; }
+      lines.push({label:beams>1?`Beam ${b+1} damage`:"Damage",big:String(dm.total),sub,cls:crit?"crit":""}); }
+  }
+  showRoll(a.name,lines,foot);
+}
+/* Damage roll for an impulse, with its save DC */
+function rollImpulse(x){
+  const dm=rollDamage(x.dmg); if(!dm) return;
+  let sub=dm.txt, extra="";
+  if(x.type==="Basic"&&gatherPending()){ const g=rollDamage(S.kin.gather); if(g){ dm.total+=g.total; sub+=` + Gather Power ${g.txt}`; extra=" Empowered: this overflows your aura."; } S.combat.gather=false; }
+  const sv=(String(x.dmg).match(/\b(Str|Dex|Con|Int|Wis|Cha)\w*\s+save/i)||[])[1];
+  const lines=[{label:"Damage",big:String(dm.total),sub}];
+  if(sv) lines.unshift({label:"Save",big:`DC ${kinStats().dc}`,sub:`${sv} save${/half/i.test(x.dmg)?", half on a success":""}`});
+  showRoll(x.name,lines,x.dmg+extra);
+}
+function checkMod(kind,k){
+  if(kind==="abil") return mod(S.abil[k]);
+  if(kind==="save") return mod(S.abil[k])+(S.saves[k]?S.prof:0);
+  const sk=SKILLS.find(s=>s[0]===k); return mod(S.abil[sk[2]])+S.prof*(S.skills[k]||0);
+}
+function rollCheck(kind,k){
+  const m=checkMod(kind,k), r=d20();
+  const name=kind==="skill"?SKILLS.find(s=>s[0]===k)[1]:(ABILS.find(a=>a[0]===k)[1]+(kind==="save"?" save":" check"));
+  showRoll(name,[{label:kind==="save"?"Saving throw":"Check",big:String(r.n+m),sub:`d20 ${r.txt} ${sgn(m)}${r.n===20?" · natural 20":r.n===1?" · natural 1":""}`,cls:r.n===20?"crit":r.n===1?"miss":""}]);
+}
 
 /* ---------- header ---------- */
 function renderHeader(){
@@ -501,10 +586,10 @@ function spend(kind){
 function castCantrip(i,line){
   const s=S.spells[i], c=S.combat, ct=castTime(s.name);
   const info=line?`: ${line.bonus} to hit, ${line.dmg}`:"";
-  if(ct==="action"&&c.atk>0&&c.atkKind==="weapon"&&!S.kin){ c.atk--; save(); render(); toast(`${s.name} as an attack${info}.${c.atk?` ${c.atk} more attack or cantrip this turn.`:""}`,4500); return; }
+  if(ct==="action"&&c.atk>0&&c.atkKind==="weapon"&&!S.kin){ c.atk--; save(); render(); if(line) rollAttack(line); toast(`${s.name} as an attack${info}.${c.atk?` ${c.atk} more attack or cantrip this turn.`:""}`,4500); return; }
   spend(ct);
   if(ct==="action"&&!S.kin&&S.features.some(f=>/^extra attack/i.test(f.name))){ c.atk=attacksPer()-1; c.atkKind="weapon"; }
-  save(); render(); toast(`${s.name}${info}.${c.atk?` You still have ${c.atk} more attack or cantrip (Extra Attack).`:""}`,4500);
+  save(); render(); if(line) rollAttack(line); toast(`${s.name}${info}.${c.atk?` You still have ${c.atk} more attack or cantrip (Extra Attack).`:""}`,4500);
 }
 /* Kineticist: aura + stance in one tap during combat */
 function kinBar(){
@@ -517,11 +602,18 @@ function kinBar(){
         :stances.map(o=>`<button class="btn gold" data-a="tChannel" data-i="${o.i}" ${locked?"disabled":""}>Channel: ${esc(o.x.name)}</button>`).join("")+`<button class="btn" data-a="tChannel" data-i="-1" ${locked?"disabled":""}>Channel, no stance</button>`}
     </div></div>`;
 }
-function startCombat(){ S.combat={on:true,round:1,action:false,bonus:false,reaction:false,move:speedNow(),atk:0}; save(); render(); toast("Combat started. Round 1."); }
-function nextTurn(){ const c=S.combat; c.round++; c.action=c.bonus=c.reaction=false; c.atk=0; c.move=speedNow(); save(); render(); toast(`Round ${c.round}: action, bonus action, reaction and movement are back.`); }
+function rollModeChips(){ const m=rollMode(); return `<div class="chips" style="margin-bottom:10px">${[["normal","Normal roll"],["adv","Advantage"],["dis","Disadvantage"]].map(([k,l])=>`<button class="chip ${m===k?"on":""}" style="${m===k?"background:var(--hexSoft);color:var(--hex);border-color:var(--hex)":""}" data-a="rollMode" data-k="${k}">${l}</button>`).join("")}</div>`; }
+function startCombat(){
+  S.combat={on:true,round:1,action:false,bonus:false,reaction:false,move:speedNow(),atk:0};
+  const im=mod(S.abil.dex)+Number(S.initMisc||0), r=d20(); S.combat.init=r.n+im;
+  save(); render();
+  showRoll("Initiative",[{label:"Initiative",big:String(r.n+im),sub:`d20 ${r.txt} ${sgn(im)}`,cls:r.n===20?"crit":r.n===1?"miss":""}],"Tell your GM, then tap Next turn at the start of each of your turns.");
+}
+function nextTurn(){ const c=S.combat; c.round++; c.action=c.bonus=c.reaction=false; c.atk=0; c.gather=false; c.move=speedNow(); save(); render(); toast(`Round ${c.round}: action, bonus action, reaction and movement are back.`); }
 function renderTurn(){
   if(!inCombat()) return `<section class="card turn" style="grid-column:1/-1"><div class="row"><h2 style="margin:0;flex:1">Turn tracker</h2><button class="btn pri" data-a="combatStart">Start combat</button></div>
-    <p class="muted small" style="margin:6px 0 0">Tracks your action, bonus action, reaction and movement each round, and marks them when you attack, cast or use an impulse.</p>
+    <p class="muted small" style="margin:6px 0 0">Tracks your action, bonus action, reaction and movement each round, and marks them when you attack, cast or use an impulse. Attack buttons roll the dice for you.</p>
+    <div style="margin-top:8px">${rollModeChips()}</div>
     <details style="margin-top:8px"><summary class="muted small">Common actions</summary>
       ${[["Action",["action","attack"]],["Bonus action",["bonus"]],["Reaction",["reaction"]],["Movement and free",["move","free"]]].map(([h,sl])=>`<h3>${h}</h3>${stdOf(sl).map(x=>`<div class="small" style="margin-bottom:4px"><strong>${x.n}</strong> <span class="muted">${x.d}</span></div>`).join("")}`).join("")}
     </details></section>`;
@@ -549,6 +641,7 @@ function renderTurn(){
     <div class="row" style="margin-bottom:10px"><h2 style="margin:0;flex:1">Round ${c.round}</h2>
       <button class="btn pri" data-a="combatNext">Next turn</button><button class="btn ghost" data-a="combatEnd">End combat</button></div>
     ${S.kin?kinBar():""}
+    ${rollModeChips()}
     <div class="slots">
       ${slot("action","Action")}${slot("bonus","Bonus action")}${slot("reaction","Reaction")}
       <div class="slot move"><b>${c.move} ft</b><span>Movement left of ${speedNow()}</span>
@@ -566,6 +659,7 @@ function renderTurn(){
       <div><h3>Reaction</h3><div class="obtns">${reactOpts}</div></div>
     </div>
     <h3>Movement and free</h3><div class="obtns">${stdBtns(["move","free"])}</div>
+    <details style="margin-top:6px"><summary class="muted small">Recent rolls</summary><div id="rollRecent" style="margin-top:4px">${recentRollsHtml()}</div></details>
   </section>`;
 }
 function renderCombat(){
@@ -585,7 +679,7 @@ function renderCombat(){
       <button class="btn pri" data-a="hp" data-k="heal">Heal</button>
       <button class="btn" data-a="hp" data-k="temp">Set temp</button>
     </div>
-    ${down?`<h3>Death saves</h3>
+    ${down?`<h3>Death saves <button class="btn sm pri" data-a="deathRoll" style="margin-left:8px">Roll death save</button></h3>
     <div class="row"><span style="width:80px">Successes</span><div class="pips">${[0,1,2].map(i=>`<button class="pip succ ${S.death.s>i?"on":""}" data-a="death" data-k="s" data-i="${i}" aria-label="Success ${i+1}"></button>`).join("")}</div></div>
     <div class="row" style="margin-top:6px"><span style="width:80px">Failures</span><div class="pips">${[0,1,2].map(i=>`<button class="pip fail ${S.death.f>i?"on":""}" data-a="death" data-k="f" data-i="${i}" aria-label="Failure ${i+1}"></button>`).join("")}</div></div>`:""}
     <h3>Hit dice</h3>
@@ -784,6 +878,7 @@ function useImpulse(i,how){
   if(x.c) S.conc=x.name;
   save(); render();
   toast(`${x.name}${x.dmg?": "+x.dmg:""}.${how==="out"&&wasFlying?" You’re falling: use Air Cushion or take the fall.":how==="out"?" Aura is out until your next turn.":""}`,4000);
+  rollImpulse(x);
 }
 
 /* ---------- character ---------- */
@@ -792,17 +887,17 @@ function renderCharacter(){
   return `<div class="grid">
   <section class="card" style="grid-column:1/-1">
     <h2>Abilities <span class="row small muted" style="font-family:var(--body);font-weight:400">Proficiency <input class="in num" type="number" data-b="prof" value="${S.prof}" style="width:56px"></span></h2>
-    <div class="abils">${ABILS.map(([k,l])=>`<div class="ab"><div class="k">${l}</div><div class="m">${sgn(mod(S.abil[k]))}</div><input type="number" data-b="abil.${k}" value="${S.abil[k]}" aria-label="${l} score"></div>`).join("")}</div>
+    <div class="abils">${ABILS.map(([k,l])=>`<div class="ab"><div class="k">${l}</div><button class="m rollv" data-a="rollCheck" data-k="abil:${k}" aria-label="Roll ${l} check">${sgn(mod(S.abil[k]))}</button><input type="number" data-b="abil.${k}" value="${S.abil[k]}" aria-label="${l} score"></div>`).join("")}</div>
   </section>
   <section class="card">
     <h2>Saving throws</h2>
-    <div class="list">${ABILS.map(([k,l])=>{const p=!!S.saves[k];return `<div class="li"><button class="dot ${p?"on":""}" data-a="save" data-k="${k}" aria-label="Toggle proficiency"></button><span class="n">${l}</span><span class="v">${sgn(mod(S.abil[k])+(p?S.prof:0))}</span></div>`}).join("")}</div>
+    <div class="list">${ABILS.map(([k,l])=>{const p=!!S.saves[k];return `<div class="li"><button class="dot ${p?"on":""}" data-a="save" data-k="${k}" aria-label="Toggle proficiency"></button><span class="n">${l}</span><button class="v rollv" data-a="rollCheck" data-k="save:${k}" aria-label="Roll ${l} save">${sgn(mod(S.abil[k])+(p?S.prof:0))}</button></div>`}).join("")}</div>
     <h3>Passive perception: ${pp}</h3>
   </section>
   <section class="card">
     <h2>Skills</h2>
-    <div class="list">${SKILLS.map(([k,l,a])=>{const p=S.skills[k]||0;return `<div class="li"><button class="dot ${p===1?"on":p===2?"ex":""}" data-a="skill" data-k="${k}" aria-label="Cycle proficiency"></button><span class="n">${l} <span class="muted small">${a.toUpperCase()}</span></span><span class="v">${sgn(mod(S.abil[a])+S.prof*p)}</span></div>`}).join("")}</div>
-    <p class="muted small">Tap a circle: proficient, then expertise, then none.</p>
+    <div class="list">${SKILLS.map(([k,l,a])=>{const p=S.skills[k]||0;return `<div class="li"><button class="dot ${p===1?"on":p===2?"ex":""}" data-a="skill" data-k="${k}" aria-label="Cycle proficiency"></button><span class="n">${l} <span class="muted small">${a.toUpperCase()}</span></span><button class="v rollv" data-a="rollCheck" data-k="skill:${k}" aria-label="Roll ${l}">${sgn(mod(S.abil[a])+S.prof*p)}</button></div>`}).join("")}</div>
+    <p class="muted small">Tap a circle: proficient, then expertise, then none. Tap a number to roll it.</p>
   </section>
   <section class="card">
     <h2>Identity</h2>
@@ -946,6 +1041,8 @@ function castModal(i){
 function addTownLog(text,amt){T.log.push({turn:T.turn,text,amt:amt||0}); if(T.log.length>300)T.log.shift()}
 
 document.addEventListener("click",e=>{
+  // Tapping anywhere outside the roll card closes it (a new roll opens a fresh one)
+  const rb=document.getElementById("rollbox"); if(rb&&!rb.hidden&&!rb.contains(e.target)&&Date.now()-rollShownAt>300) rb.hidden=true;
   const el=e.target.closest("[data-a]"); if(!el) return;
   const a=el.dataset.a, k=el.dataset.k, i=Number(el.dataset.i), j=Number(el.dataset.j);
   if(a==="closeModal"){ if(e.target!==el) return; closeModal(); render(); return; }
@@ -974,6 +1071,16 @@ document.addEventListener("click",e=>{
       if(f.max>0) f.used++; S.bladesong=true; spend("bonus"); save(); render();
       toast(`Bladesong (1 minute): AC +${bsBonus()}, speed +10 ft, advantage on Acrobatics, +${bsBonus()} on concentration saves. Ends with medium or heavy armor, a shield, or a two-handed attack.`,6000); return; }
     case "combatStart": startCombat(); return;
+    case "rollMode": S.rollMode=k; save(); render(); return;
+    case "rollClose": document.getElementById("rollbox").hidden=true; return;
+    case "rollCheck": { const [kind,key]=k.split(":"); rollCheck(kind,key); return; }
+    case "deathRoll": { const r=roll(20); let res;
+      if(r===20){ S.hp.cur=1; S.death={s:0,f:0}; res="Natural 20: you’re back with 1 HP!"; }
+      else if(r===1){ S.death.f=Math.min(3,S.death.f+2); res="Natural 1: two failures."; }
+      else if(r>=10){ S.death.s=Math.min(3,S.death.s+1); res=S.death.s>=3?"Third success: you’re stable.":"Success."; }
+      else { S.death.f=Math.min(3,S.death.f+1); res="Failure."; }
+      if(S.death.f>=3) res+=" Three failures: you die.";
+      save(); render(); showRoll("Death save",[{label:"d20",big:String(r),sub:res,cls:r===20?"crit":r<10?"miss":""}]); return; }
     case "tChannel": { const k=S.kin; k.stance=i>=0?k.impulses[i].name:""; k.aura=true; spend("bonus"); save(); render(); toast(`Aura on${k.stance?`, ${k.stance}`:""}.`); return; }
     case "tStance": { const k=S.kin; k.stance=k.impulses[i].name; save(); render(); toast(`Stance: ${k.stance}.`); return; }
     case "combatNext": nextTurn(); return;
@@ -984,12 +1091,12 @@ document.addEventListener("click",e=>{
       // An attack line that is really a cantrip on the sheet (Eldritch Blast, Booming Blade...) follows cantrip rules
       const cj=S.spells.findIndex(s=>s.lvl===0&&s.name.toLowerCase()===String(a.name||"").toLowerCase());
       if(cj>=0&&inCombat()){ castCantrip(cj,a); return; }
-      if(!inCombat()){ toast(`${a.name}: ${a.bonus} to hit, ${a.dmg}. Start combat on the turn tracker to count your attacks.`,4500); return; }
+      if(!inCombat()){ rollAttack(a); return; }
       const c=S.combat, kind=attackKind(a);
       if(c.atk>0&&c.atkKind===kind) c.atk--; else { spend("action"); c.atk=attacksPer(a)-1; c.atkKind=kind; }
-      save(); render(); toast(`${a.name}: ${a.bonus} to hit, ${a.dmg}.${c.atk?` ${c.atk} more attack${c.atk>1?"s":""} this turn.`:""}`,4000); return; }
+      save(); render(); rollAttack(a); if(c.atk||spendWarn) toast(c.atk?`${c.atk} more attack${c.atk>1?"s":""} this turn.`:"",3500); return; }
     case "tCast": { const s=S.spells[i];
-      if(s.lvl===0){ castCantrip(i); return; }
+      if(s.lvl===0){ castCantrip(i,S.attacks.find(a=>String(a.name).toLowerCase()===s.name.toLowerCase())); return; }
       castModal(i); return; }
     case "tStd": { const [slot,n,d]=STD_ACTIONS[i];
       if(!inCombat()){ toast(`${n}: ${d}`,5000); return; }
@@ -999,8 +1106,8 @@ document.addEventListener("click",e=>{
       if(n==="Dash") c.move+=speedNow();
       if(n==="Stand up") c.move=Math.max(0,c.move-Math.floor(speedNow()/2));
       save(); render(); toast(`${n}: ${d}${slot==="attack"&&c.atk?` ${c.atk} more attack${c.atk>1?"s":""} this turn.`:""}`,5000); return; }
-    case "tGather": spend("bonus"); S.combat.move=0; save(); render(); toast(`Gather Power: speed 0 this turn. Your first blast or Basic impulse adds +${S.kin.gather}.`,4500); return;
-    case "tBonusAtk": { spend("bonus"); save(); render(); const a=S.attacks.find(x=>/crossbow/i.test(x.name)); toast(`Bonus shot${a?`: ${a.bonus} to hit, ${a.dmg}`:""}.`,4000); return; }
+    case "tGather": spend("bonus"); S.combat.move=0; S.combat.gather=true; save(); render(); toast(`Gather Power: speed 0 this turn. Your first blast or Basic impulse adds +${S.kin.gather}.`,4500); return;
+    case "tBonusAtk": { spend("bonus"); save(); render(); const a=S.attacks.find(x=>/crossbow/i.test(x.name)); if(a) rollAttack(a); else toast("Bonus shot."); return; }
     case "tFeat": { const f=S.features[i]; if(f.max>0&&f.used>=f.max){ toast(`No ${f.name} uses left.`); return; } if(f.max>0) f.used++; spend(k); save(); render(); toast(`${f.name} used.`); return; }
     case "featEdit": e.preventDefault(); featEditModal(i); return;
     case "featSave": featSave(i); return;
