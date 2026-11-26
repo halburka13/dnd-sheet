@@ -170,6 +170,22 @@ h3+.feat{border-top:0}
 .ty-Surge,.ty-Complex{color:var(--blood);border-color:var(--blood)} .ty-Stance{color:var(--gold);border-color:var(--gold)}
 .imp.stance-on{background:var(--goldSoft);border-radius:8px}
 
+/* turn tracker */
+.slots{display:grid;grid-template-columns:repeat(3,1fr) 1.6fr;gap:8px}
+@media (max-width:700px){.slots{grid-template-columns:repeat(3,1fr)}.slot.move{grid-column:1/-1}}
+.slot{background:var(--hexSoft);border:2px solid var(--hex);border-radius:12px;padding:8px;text-align:center;min-height:64px}
+.slot b{display:block;font-family:var(--display);font-size:24px;line-height:1.1;color:var(--hex)}
+.slot span{font-size:13px;color:var(--muted)}
+.slot.used{background:none;border-color:var(--line)} .slot.used b{color:var(--muted)}
+.slot.move{background:var(--panel2);border-color:var(--line)} .slot.move b{color:var(--ink)}
+.atkleft{margin:10px 0 0;padding:8px 12px;border-radius:10px;background:var(--goldSoft);color:var(--gold)}
+.opts{display:grid;gap:14px;grid-template-columns:2fr 1fr 1fr;margin-top:6px}
+@media (max-width:900px){.opts{grid-template-columns:1fr}}
+.opts h3{margin:10px 0 4px}
+.obtns{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px}
+.btn.imp-ov{border-color:var(--blood)}
+.vit.turnvit{border:0;background:var(--hexSoft)} .vit.turnvit b{color:var(--hex);font-size:18px}
+
 /* coins/town */
 .coins{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
 .coin{text-align:center;background:var(--panel2);border-radius:12px;padding:8px}
@@ -390,7 +406,7 @@ function bsFeature(){return S&&S.features.find(f=>/^bladesong/i.test(f.name||"")
 function bsBonus(){return Math.max(1,mod(S.abil.int))}
 function acNow(){return Number(S.ac)+(S.shield?5:0)+(S.bladesong?bsBonus():0)}
 function speedNow(){return Number(S.speed)+(S.bladesong?10:0)}
-function toast(msg,ms=2600){const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),ms)}
+function toast(msg,ms=2600){const t=document.getElementById("toast");if(spendWarn){msg=spendWarn+msg;spendWarn="";ms=Math.max(ms,4500);}spentTwice=[];t.textContent=msg;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),ms)}
 function roll(d){return 1+Math.floor(Math.random()*d)}
 
 /* ---------- header ---------- */
@@ -418,7 +434,8 @@ function renderHeader(){
     <div class="vit hp"><b>${S.hp.cur}${S.hp.temp?`<small style="color:var(--violet);font-size:16px"> +${S.hp.temp}</small>`:""}</b><span>HP / ${S.hp.max}</span></div>
     <div class="vit"><b>${acNow()}</b><span>AC${S.shield?" (Shield)":""}</span></div>
     <div class="vit"><b>${sgn(mod(S.abil.dex)+Number(S.initMisc||0))}</b><span>Init</span></div>
-    <div class="vit"><b>${speedNow()}</b><span>Speed</span></div>${bsFeature()?`
+    <div class="vit"><b>${speedNow()}</b><span>Speed</span></div>${inCombat()?`
+    <button class="vit turnvit" data-a="tab" data-k="combat" title="Open the turn tracker"><b>${["action","bonus","reaction"].map(k=>S.combat[k]?"·":k==="action"?"A":k==="bonus"?"B":"R").join(" ")}</b><span>Round ${S.combat.round}</span></button>`:""}${bsFeature()?`
     <button class="vit aura ${S.bladesong?"on":""}" data-a="bladesong" aria-pressed="${!!S.bladesong}" title="Tap to start or end Bladesong"><b>${S.bladesong?"On":"Off"}</b><span>Bladesong</span></button>`:""}${S.kin?`
     <button class="vit aura ${S.kin.aura?"on":""}" data-a="aura" aria-pressed="${!!S.kin.aura}" title="Tap to turn your kinetic aura on or off"><b>${S.kin.aura?"On":"Off"}</b><span>Aura</span></button>`:""}${conc}`;
 }
@@ -433,11 +450,73 @@ function tabList(){
 }
 
 /* ---------- combat ---------- */
+/* ---------- turn tracker (action economy) ---------- */
+// Casting times for common spells that aren't an action. Anything not listed counts as an action.
+const CAST_TIME={"hex":"bonus","misty step":"bonus","spiritual weapon":"bonus","healing word":"bonus","shillelagh":"bonus","wrathful smite":"bonus","searing smite":"bonus","thunderous smite":"bonus","branding smite":"bonus","blinding smite":"bonus","staggering smite":"bonus","hunter’s mark":"bonus","hunter's mark":"bonus","spirit shroud":"bonus","expeditious retreat":"bonus","sanctuary":"bonus","magic weapon":"bonus","flame blade":"bonus","shadow blade":"bonus","shield":"reaction","counterspell":"reaction","hellish rebuke":"reaction","absorb elements":"reaction","feather fall":"reaction","silvery barbs":"reaction"};
+const SLOT_NAME={action:"action",bonus:"bonus action",reaction:"reaction"};
+const STD_ACTIONS=[["Dash","Extra movement equal to your speed."],["Dodge","Attacks against you have disadvantage; Dex saves with advantage."],["Disengage","Your movement doesn’t provoke opportunity attacks."],["Help","An ally gets advantage on their next check or attack."],["Hide","Make a Stealth check."],["Ready","Pick a trigger and a reaction to take then."],["Search","Make a Perception or Investigation check."],["Use an object","Drink a potion, open a door, and so on."]];
+function inCombat(){return !!(S&&S.combat&&S.combat.on)}
+function castTime(name){return CAST_TIME[String(name||"").toLowerCase()]||"action"}
+function attacksPer(){ if(S.kin) return Math.max(1,Number(S.kin.blast.count)||1); return S.features.some(f=>/^extra attack/i.test(f.name))?2:1 }
+function impTime(x){const a=String(x.act||"").toLowerCase(); if(x.type==="Complex"||/action \+ bonus/.test(a)) return ["action","bonus"]; if(/reaction/.test(a)) return ["reaction"]; if(/bonus/.test(a)) return ["bonus"]; if(/^action/.test(a)) return ["action"]; return []}
+/* Marks a slot used during combat. Warns (doesn't block) if it was already spent. */
+let spendWarn="", spentTwice=[]; // warning shown in front of the next toast
+function spend(kind){
+  if(!inCombat()) return;
+  const c=S.combat;
+  if(c[kind]&&!spentTwice.includes(SLOT_NAME[kind])){ spentTwice.push(SLOT_NAME[kind]); spendWarn=`Already used your ${spentTwice.join(" and ")} this turn! `; }
+  c[kind]=true;
+}
+function startCombat(){ S.combat={on:true,round:1,action:false,bonus:false,reaction:false,move:speedNow(),atk:0}; save(); render(); toast("Combat started. Round 1."); }
+function nextTurn(){ const c=S.combat; c.round++; c.action=c.bonus=c.reaction=false; c.atk=0; c.move=speedNow(); save(); render(); toast(`Round ${c.round}: action, bonus action, reaction and movement are back.`); }
+function renderTurn(){
+  if(!inCombat()) return `<section class="card turn" style="grid-column:1/-1"><div class="row"><h2 style="margin:0;flex:1">Turn tracker</h2><button class="btn pri" data-a="combatStart">Start combat</button></div>
+    <p class="muted small" style="margin:6px 0 0">Tracks your action, bonus action, reaction and movement each round, and marks them when you attack, cast or use an impulse.</p></section>`;
+  const c=S.combat, per=attacksPer();
+  const slot=(k,l)=>`<button class="slot ${c[k]?"used":""}" data-a="slotToggle" data-k="${k}" aria-pressed="${c[k]}"><b>${c[k]?"Used":"Ready"}</b><span>${l}</span></button>`;
+  const opt=(a,label,attrs="",cls="")=>`<button class="btn sm ${cls}" data-a="${a}" ${attrs}>${label}</button>`;
+  // Action options
+  const atk=S.attacks.map((a,i)=>opt("tAttack",`${esc(a.name)} <span class="muted">${esc(a.bonus)}</span>`,`data-i="${i}"`)).join("");
+  const imps=S.kin?S.kin.impulses.map((x,i)=>({x,i,t:impTime(x)})):[];
+  const ready=S.spells.map((s,i)=>({...s,i})).filter(s=>isReady(s));
+  const spellBtns=kind=>ready.filter(s=>castTime(s.name)===kind).map(s=>opt("tCast",`${esc(s.name)}${s.lvl?` <span class="muted">${ORD[s.lvl]}</span>`:""}`,`data-i="${s.i}"`)).join("");
+  const impBtns=kind=>imps.filter(o=>o.t[0]===kind).map(o=>opt("impUse",`${esc(o.x.name)}${o.t.length>1?` <span class="muted">+ bonus</span>`:""}`,`data-i="${o.i}"`,o.x.type==="Basic"?"":"imp-ov")).join("");
+  const curse=S.features.map((f,i)=>({f,i})).find(o=>/hexblade.s curse/i.test(o.f.name));
+  const bonusOpts=[
+    S.kin&&!S.kin.aura?opt("aura","Channel elements (aura on)","","gold"):"",
+    S.kin?opt("tGather","Gather Power"):"",
+    bsFeature()&&!S.bladesong?opt("bladesong",`Bladesong <span class="muted">${bsFeature().max-bsFeature().used} left</span>`,"","gold"):"",
+    curse?opt("tFeat",`${esc(curse.f.name)} <span class="muted">${curse.f.max-curse.f.used} left</span>`,`data-i="${curse.i}" data-k="bonus"`):"",
+    S.features.some(f=>/crossbow expert/i.test(f.name))?opt("tBonusAtk","Crossbow Expert: hand crossbow shot"):"",
+    spellBtns("bonus"), impBtns("bonus")].join("");
+  const reactOpts=[opt("tOpp","Opportunity attack"), spellBtns("reaction"), impBtns("reaction")].join("");
+  return `<section class="card turn" style="grid-column:1/-1">
+    <div class="row" style="margin-bottom:10px"><h2 style="margin:0;flex:1">Round ${c.round}</h2>
+      <button class="btn pri" data-a="combatNext">Next turn</button><button class="btn ghost" data-a="combatEnd">End combat</button></div>
+    <div class="slots">
+      ${slot("action","Action")}${slot("bonus","Bonus action")}${slot("reaction","Reaction")}
+      <div class="slot move"><b>${c.move} ft</b><span>Movement left of ${speedNow()}</span>
+        <div class="row" style="justify-content:center;gap:4px;margin-top:4px">${[5,10,15,30].map(n=>`<button class="btn sm" data-a="tMove" data-k="${n}" aria-label="Move ${n} feet">−${n}</button>`).join("")}<button class="btn sm ghost" data-a="tMove" data-k="reset">Reset</button></div></div>
+    </div>
+    ${c.atk>0?`<p class="atkleft">Attack action: <strong>${c.atk} more attack${c.atk>1?"s":""}</strong> this turn${S.kin?"":" (one can be a cantrip)"}.</p>`:""}
+    <div class="opts">
+      <div><h3>Action</h3>
+        ${atk?`<div class="muted small">Attack${per>1?` (×${per} per action)`:""}</div><div class="obtns">${atk}</div>`:""}
+        ${imps.some(o=>o.t[0]==="action")?`<div class="muted small">Impulses</div><div class="obtns">${impBtns("action")}</div>`:""}
+        ${ready.some(s=>castTime(s.name)==="action")?`<div class="muted small">Spells</div><div class="obtns">${spellBtns("action")}</div>`:""}
+        <div class="muted small">Other actions</div><div class="obtns">${STD_ACTIONS.map(([n],j)=>opt("tStd",n,`data-i="${j}"`,"ghost")).join("")}</div>
+      </div>
+      <div><h3>Bonus action</h3><div class="obtns">${bonusOpts||`<span class="muted small">Nothing on your sheet uses a bonus action.</span>`}</div></div>
+      <div><h3>Reaction</h3><div class="obtns">${reactOpts}</div></div>
+    </div>
+  </section>`;
+}
 function renderCombat(){
   const pct=Math.max(0,Math.min(100,S.hp.cur/S.hp.max*100));
   const tpct=Math.min(100-pct,S.hp.temp/S.hp.max*100);
   const down=S.hp.cur<=0;
   return `<div class="grid">
+  ${renderTurn()}
   <section class="card">
     <h2>Hit points</h2>
     <div class="hpbig"><span class="cur">${S.hp.cur}</span><span class="max">/ <input class="in num bare" type="number" data-b="hp.max" value="${S.hp.max}" aria-label="Max HP" style="font-size:22px;width:70px"></span>
@@ -643,6 +722,7 @@ function useImpulse(i,how){
   if(how==="buffer"){ const buf=S.features.find(f=>/internal buffer/i.test(f.name)); if(buf) buf.used=Math.min(buf.max,buf.used+1); }
   const wasFlying=k.aura&&/cyclonic/i.test(k.stance);
   if(how==="out") k.aura=false;
+  impTime(x).forEach(t=>spend(t));
   if(x.c) S.conc=x.name;
   save(); render();
   toast(`${x.name}${x.dmg?": "+x.dmg:""}.${how==="out"&&wasFlying?" You’re falling: use Air Cushion or take the fall.":how==="out"?" Aura is out until your next turn.":""}`,4000);
@@ -789,7 +869,7 @@ function doRest(kind){
     let regain=Math.max(1,Math.floor(totalLevel()/2));
     S.hd.slice().sort((a,b)=>b.die-a.die).forEach(h=>{const r=Math.min(h.used,regain);h.used-=r;regain-=r});
     if(S.exhaustion>0)S.exhaustion--;
-    S.conc=""; S.shield=false; S.bladesong=false; if(S.kin) S.kin.aura=false;
+    S.conc=""; S.shield=false; S.bladesong=false; if(S.combat) S.combat.on=false; if(S.kin) S.kin.aura=false;
     toast("Long rest done: HP, slots and features restored. You can change prepared spells and use Cantrip Formulas now.",4500);
   }
   save(); render();
@@ -827,13 +907,33 @@ document.addEventListener("click",e=>{
       save(); render(); return; }
     case "death": { const cur=S.death[k]; S.death[k]=cur>i?i:i+1; save(); render(); return; }
     case "toggleShield": S.shield=!S.shield; save(); render(); return;
-    case "aura": { if(!S||!S.kin) return; const k=S.kin; const fly=k.aura&&/cyclonic/i.test(k.stance); k.aura=!k.aura; save(); render();
+    case "aura": { if(!S||!S.kin) return; const k=S.kin; const fly=k.aura&&/cyclonic/i.test(k.stance); k.aura=!k.aura; if(k.aura) spend("bonus"); save(); render();
       toast(k.aura?(k.stance?`Aura on. Stance: ${k.stance}.`:"Aura on. No stance picked."):fly?"Aura off. Cyclonic Ascent ends, so you fall unless something holds you up.":"Aura off."); return; }
     case "bladesong": { const f=bsFeature(); if(!f) return;
-      if(S.bladesong){ S.bladesong=false; save(); render(); toast("Bladesong ended."); return; }
+      if(S.bladesong){ S.bladesong=false; if(inCombat()) S.combat.move=Math.max(0,S.combat.move-10); save(); render(); toast("Bladesong ended."); return; }
       if(f.max>0&&f.used>=f.max){ toast("No Bladesong uses left. They come back after a long rest.",3500); return; }
-      if(f.max>0) f.used++; S.bladesong=true; save(); render();
+      if(inCombat()) S.combat.move+=10;
+      if(f.max>0) f.used++; S.bladesong=true; spend("bonus"); save(); render();
       toast(`Bladesong (1 minute): AC +${bsBonus()}, speed +10 ft, advantage on Acrobatics, +${bsBonus()} on concentration saves. Ends with medium or heavy armor, a shield, or a two-handed attack.`,6000); return; }
+    case "combatStart": startCombat(); return;
+    case "combatNext": nextTurn(); return;
+    case "combatEnd": S.combat.on=false; save(); render(); toast("Combat ended."); return;
+    case "slotToggle": S.combat[k]=!S.combat[k]; save(); render(); return;
+    case "tMove": { const c=S.combat; c.move=k==="reset"?speedNow():Math.max(0,c.move-Number(k)); save(); render(); return; }
+    case "tAttack": { const a=S.attacks[i], c=S.combat;
+      if(c.atk>0) c.atk--; else { spend("action"); c.atk=attacksPer()-1; }
+      save(); render(); toast(`${a.name}: ${a.bonus} to hit, ${a.dmg}.${c.atk?` ${c.atk} more attack${c.atk>1?"s":""} this turn.`:""}`,4000); return; }
+    case "tCast": { const s=S.spells[i];
+      if(s.lvl===0){ const c=S.combat, ct=castTime(s.name);
+        // A cantrip can replace one attack of the Attack action (Bladesinger Extra Attack)
+        if(ct==="action"&&c.atk>0&&!S.kin){ c.atk--; save(); render(); toast(`Cast ${s.name} in place of an attack.${c.atk?` ${c.atk} more attack${c.atk>1?"s":""} this turn.`:""}`,4000); return; }
+        spend(ct); save(); render(); toast(`Cast ${s.name}.`); return; }
+      castModal(i); return; }
+    case "tStd": { const [n,d]=STD_ACTIONS[i]; spend("action"); if(n==="Dash") S.combat.move+=speedNow(); save(); render(); toast(`${n}: ${d}`,4000); return; }
+    case "tOpp": spend("reaction"); save(); render(); toast("Opportunity attack: one melee attack against the creature leaving your reach.",4000); return;
+    case "tGather": spend("bonus"); S.combat.move=0; save(); render(); toast(`Gather Power: speed 0 this turn. Your first blast or Basic impulse adds +${S.kin.gather}.`,4500); return;
+    case "tBonusAtk": { spend("bonus"); save(); render(); const a=S.attacks.find(x=>/crossbow/i.test(x.name)); toast(`Bonus shot${a?`: ${a.bonus} to hit, ${a.dmg}`:""}.`,4000); return; }
+    case "tFeat": { const f=S.features[i]; if(f.max>0&&f.used>=f.max){ toast(`No ${f.name} uses left.`); return; } if(f.max>0) f.used++; spend(k); save(); render(); toast(`${f.name} used.`); return; }
     case "featEdit": e.preventDefault(); featEditModal(i); return;
     case "featSave": featSave(i); return;
     case "featFilter": featFilter=k; render(); return;
@@ -891,6 +991,7 @@ document.addEventListener("click",e=>{
     case "cast": castModal(i); return;
     case "castAt": { const s=S.spells[i];
       if(k==="pact") S.pact.used++; else if(k!=="ritual") S.slots[k].used++;
+      if(k!=="ritual") spend(castTime(s.name));
       if(s.c) S.conc=s.name;
       closeModal(); save(); render(); toast(`Cast ${s.name}${k==="ritual"?" as a ritual":k==="pact"?" with a pact slot":" at "+ORD[k]+" level"}.`); return; }
     case "addSpell": if(!Object.keys(S.sources).length){ S.sources.main={label:"Spellcasting",abil:"int",prepares:false,level:1}; save(); } modal(`<h2>Add spell</h2>
