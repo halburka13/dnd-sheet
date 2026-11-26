@@ -647,11 +647,29 @@ function attacksPer(a){ if(isBlast(a)) return Math.max(1,Number(S.kin.blast.coun
 function attackKind(a){return isBlast(a)?"blast":"weapon"}
 function impTime(x){const a=String(x.act||"").toLowerCase(); if(x.type==="Complex"||/action \+ bonus/.test(a)) return ["action","bonus"]; if(/reaction/.test(a)) return ["reaction"]; if(/bonus/.test(a)) return ["bonus"]; if(/^action/.test(a)) return ["action"]; return []}
 /* Marks a slot used during combat. Warns (doesn't block) if it was already spent. */
-let spendWarn="", spentTwice=[]; // warning shown in front of the next toast
+let spendWarn="", spentTwice=[], forceNext=false, pendingEl=null;
+/* Which slots a tracker button needs right now (empty = free, or it uses a leftover Extra Attack swing) */
+function costOf(a,k,i){
+  const c=S&&S.combat; if(!c) return [];
+  const cantrip=sp=>{ const ct=castTime(sp.name); if(ct==="action"&&c.atk>0&&c.atkKind==="weapon"&&!c.cantripSwap&&!S.kin) return []; return [ct]; };
+  switch(a){
+    case "tAttack": { const at=S.attacks[i]; if(!at) return []; return c.atk>0&&c.atkKind===attackKind(at)?[]:["action"]; }
+    case "tCast": { const sp=S.spells[i]; if(!sp) return []; return sp.lvl===0?cantrip(sp):[castTime(sp.name)]; }
+    case "castCantripBtn": return S.spells[i]?cantrip(S.spells[i]):[];
+    case "cast": return S.spells[i]?[castTime(S.spells[i].name)]:[];
+    case "impUse": { const x=S.kin&&S.kin.impulses[i]; return x?impTime(x):[]; }
+    case "tStd": { const st=STD_ACTIONS[i]; if(!st) return []; if(st[0]==="attack") return c.atk>0&&c.atkKind==="weapon"?[]:["action"]; return ["action","bonus","reaction"].includes(st[0])?[st[0]]:[]; }
+    case "tGather": case "tBonusAtk": case "tChannel": return ["bonus"];
+    case "tFeat": return k?[k]:[];
+    case "aura": return S.kin&&!S.kin.aura?["bonus"]:[];
+    case "bladesong": return !S.bladesong?["bonus"]:[];
+  }
+  return [];
+} // warning shown in front of the next toast
 function spend(kind){
   if(!inCombat()) return;
   const c=S.combat;
-  if(c[kind]&&!spentTwice.includes(SLOT_NAME[kind])){ spentTwice.push(SLOT_NAME[kind]); spendWarn=`Already used your ${spentTwice.join(" and ")} this turn! `; }
+  if(c[kind]&&!forceNext&&!spentTwice.includes(SLOT_NAME[kind])){ spentTwice.push(SLOT_NAME[kind]); spendWarn=`Already used your ${spentTwice.join(" and ")} this turn! `; }
   c[kind]=true;
 }
 /* Cantrip during combat. With Extra Attack (Bladesinger), ONE 1-action cantrip per Attack action can take the place of an attack. */
@@ -1123,6 +1141,10 @@ document.addEventListener("click",e=>{
   const el=e.target.closest("[data-a]"); if(!el) return;
   const a=el.dataset.a, k=el.dataset.k, i=Number(el.dataset.i), j=Number(el.dataset.j);
   if(a==="closeModal"){ if(e.target!==el) return; closeModal(); render(); return; }
+  if(a==="forceRedo"){ const p=pendingEl; closeModal(); if(p&&document.body.contains(p)){ forceNext=true; try{ p.click(); } finally { forceNext=false; } } return; }
+  // In combat, stop actions whose action / bonus action / reaction is already used (with a "do it anyway" for GM extras)
+  if(!forceNext&&inCombat()){ const need=costOf(a,k,i), used=need.filter(x=>S.combat[x]);
+    if(used.length){ pendingEl=el; modal(`<h2>Already used</h2><p>You already used your ${used.map(x=>SLOT_NAME[x]).join(" and ")} this turn${a==="tCast"||a==="castCantripBtn"?". With Extra Attack, only one cantrip can replace an attack":""}.</p><p class="muted small">Tap Next turn when your new turn starts. Use “Do it anyway” only if something gives you an extra one (like Action Surge or Haste).</p><button class="btn" data-a="forceRedo" style="text-align:center">Do it anyway</button>`); return; } }
   switch(a){
     case "tab": tab=k; render(); window.scrollTo(0,0); return;
     case "shortRest": doRest("short"); return;
