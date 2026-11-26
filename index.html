@@ -34,6 +34,7 @@
   color-scheme:dark;
 }
 *,*::before,*::after{box-sizing:inherit}
+[hidden]{display:none!important}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.45;-webkit-tap-highlight-color:transparent}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--panel)}
@@ -383,7 +384,11 @@ const fmt=n=>Number(n||0).toLocaleString("en-US");
 function getP(path){if(path.startsWith("town."))return path.slice(5).split(".").reduce((o,k)=>o?.[k],T);return path.split(".").reduce((o,k)=>o?.[k],S)}
 function setP(path,val){let ks=path.split(".");let o=S;if(ks[0]==="town"){o=T;ks=ks.slice(1);}for(let i=0;i<ks.length-1;i++)o=o[ks[i]];o[ks.at(-1)]=val}
 function totalLevel(){return S.hd.reduce((a,h)=>a+Number(h.total||0),0)}
-function acNow(){return Number(S.ac)+(S.shield?5:0)}
+/* Bladesong (Bladesinger wizard): shown when the character has a feature named "Bladesong" */
+function bsFeature(){return S&&S.features.find(f=>/^bladesong/i.test(f.name||""))}
+function bsBonus(){return Math.max(1,mod(S.abil.int))}
+function acNow(){return Number(S.ac)+(S.shield?5:0)+(S.bladesong?bsBonus():0)}
+function speedNow(){return Number(S.speed)+(S.bladesong?10:0)}
 function toast(msg,ms=2600){const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),ms)}
 function roll(d){return 1+Math.floor(Math.random()*d)}
 
@@ -412,7 +417,8 @@ function renderHeader(){
     <div class="vit hp"><b>${S.hp.cur}${S.hp.temp?`<small style="color:var(--violet);font-size:16px"> +${S.hp.temp}</small>`:""}</b><span>HP / ${S.hp.max}</span></div>
     <div class="vit"><b>${acNow()}</b><span>AC${S.shield?" (Shield)":""}</span></div>
     <div class="vit"><b>${sgn(mod(S.abil.dex)+Number(S.initMisc||0))}</b><span>Init</span></div>
-    <div class="vit"><b>${S.speed}</b><span>Speed</span></div>${S.kin?`
+    <div class="vit"><b>${speedNow()}</b><span>Speed</span></div>${bsFeature()?`
+    <button class="vit aura ${S.bladesong?"on":""}" data-a="bladesong" aria-pressed="${!!S.bladesong}" title="Tap to start or end Bladesong"><b>${S.bladesong?"On":"Off"}</b><span>Bladesong</span></button>`:""}${S.kin?`
     <button class="vit aura ${S.kin.aura?"on":""}" data-a="aura" aria-pressed="${!!S.kin.aura}" title="Tap to turn your kinetic aura on or off"><b>${S.kin.aura?"On":"Off"}</b><span>Aura</span></button>`:""}${conc}`;
 }
 /* Spells tab is hidden for a kineticist with no spells; Impulses tab only shows for kineticists */
@@ -457,7 +463,8 @@ function renderCombat(){
       <div class="vit" style="min-width:110px"><b style="font-size:40px">${acNow()}</b><span>Armor class</span></div>
       <div>
         <label class="row small muted">Base AC <input class="in num" type="number" data-b="ac" value="${S.ac}"></label>
-        <button class="chip ${S.shield?"on":""}" data-a="toggleShield" style="margin-top:8px">Shield spell (+5)</button>
+        ${S.shield||S.spells.some(s=>/^shield$/i.test(s.name))?`<button class="chip ${S.shield?"on":""}" data-a="toggleShield" style="margin-top:8px">Shield spell (+5)</button>`:""}
+        ${bsFeature()?`<button class="chip ${S.bladesong?"on":""}" data-a="bladesong" style="margin-top:8px">Bladesong (+${bsBonus()})</button>`:""}
       </div>
     </div>
     <h3>Concentration</h3>
@@ -781,7 +788,7 @@ function doRest(kind){
     let regain=Math.max(1,Math.floor(totalLevel()/2));
     S.hd.slice().sort((a,b)=>b.die-a.die).forEach(h=>{const r=Math.min(h.used,regain);h.used-=r;regain-=r});
     if(S.exhaustion>0)S.exhaustion--;
-    S.conc=""; S.shield=false; if(S.kin) S.kin.aura=false;
+    S.conc=""; S.shield=false; S.bladesong=false; if(S.kin) S.kin.aura=false;
     toast("Long rest done: HP, slots and features restored. You can change prepared spells and use Cantrip Formulas now.",4500);
   }
   save(); render();
@@ -812,7 +819,7 @@ document.addEventListener("click",e=>{
     case "hp": {
       const inp=document.getElementById("hpAmt"); const n=Math.max(0,Math.floor(Number(inp.value)||0)); if(!n&&k!=="temp"){inp.focus();return;}
       if(k==="dmg"){ let d=n; const t=Math.min(S.hp.temp,d); S.hp.temp-=t; d-=t; S.hp.cur=Math.max(0,S.hp.cur-d);
-        if(S.conc) toast(`Concentration check: Con save DC ${Math.max(10,Math.floor(n/2))} to keep ${S.conc}.`,4500);
+        if(S.conc) toast(`Concentration check: Con save DC ${Math.max(10,Math.floor(n/2))} to keep ${S.conc}.${S.bladesong?` Bladesong adds +${bsBonus()}.`:""}`,4500);
         if(S.hp.cur===0) toast("You’re down. Death saves are showing.",3500); }
       else if(k==="heal"){ if(S.hp.cur===0)S.death={s:0,f:0}; S.hp.cur=Math.min(S.hp.max,S.hp.cur+n); }
       else S.hp.temp=n;
@@ -821,6 +828,11 @@ document.addEventListener("click",e=>{
     case "toggleShield": S.shield=!S.shield; save(); render(); return;
     case "aura": { if(!S||!S.kin) return; const k=S.kin; const fly=k.aura&&/cyclonic/i.test(k.stance); k.aura=!k.aura; save(); render();
       toast(k.aura?(k.stance?`Aura on. Stance: ${k.stance}.`:"Aura on. No stance picked."):fly?"Aura off. Cyclonic Ascent ends, so you fall unless something holds you up.":"Aura off."); return; }
+    case "bladesong": { const f=bsFeature(); if(!f) return;
+      if(S.bladesong){ S.bladesong=false; save(); render(); toast("Bladesong ended."); return; }
+      if(f.max>0&&f.used>=f.max){ toast("No Bladesong uses left. They come back after a long rest.",3500); return; }
+      if(f.max>0) f.used++; S.bladesong=true; save(); render();
+      toast(`Bladesong (1 minute): AC +${bsBonus()}, speed +10 ft, advantage on Acrobatics, +${bsBonus()} on concentration saves. Ends with medium or heavy armor, a shield, or a two-handed attack.`,6000); return; }
     case "featEdit": e.preventDefault(); featEditModal(i); return;
     case "featSave": featSave(i); return;
     case "featFilter": featFilter=k; render(); return;
