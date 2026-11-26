@@ -190,6 +190,10 @@ h3+.feat{border-top:0}
 .rb-line b{font-family:var(--display);font-size:30px;line-height:1.1;text-align:center}
 .rb-lbl{font-size:14px;color:var(--muted)} .rb-sub{font-size:13px;color:var(--muted)}
 .rb-line.crit b{color:var(--gold)} .rb-line.miss b{color:var(--blood)}
+.rb-ask{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line)} .rb-ask span{flex:1;font-weight:700}
+.rb-ask .btn{min-width:84px;text-align:center}
+.riders{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.rider{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;border-radius:10px;background:var(--bloodSoft);color:var(--blood);font-size:15px}
 .rb-note{font-size:14px;color:var(--gold);border-top:1px solid var(--line);padding-top:4px;margin-top:2px}
 .rb-foot{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:4px}
 button.v.rollv{background:none;border:1px solid var(--line);border-radius:8px;min-height:36px;min-width:52px;font-family:var(--display);font-size:20px}
@@ -460,23 +464,62 @@ function recentRollsHtml(){ return rollLog.length?rollLog.map(r=>`<div class="sm
 function meleeWeapon(){ return S.attacks.find(a=>!/weapon/i.test(a.dmg||"")&&!S.spells.some(s=>s.lvl===0&&s.name.toLowerCase()===String(a.name).toLowerCase())&&/melee|5 ft|hammer|sword|axe|mace|dagger|rapier|spear|blade|staff|club/i.test((a.name||"")+" "+(a.note||""))) }
 function gatherPending(){ return !!(inCombat()&&S.combat.gather) }
 /* Attack roll(s) for an attack line: d20 + bonus, then damage (crit doubles dice). Handles "×2 beams" and "weapon + 1d8". */
+/* ---------- two-phase attacks: roll to hit, then you tap Hit or Miss ----------
+   On a hit the damage is rolled, plus Gather Power (first blast hit) and any pending smite (first melee hit).
+   Natural 20 hits and crits automatically; natural 1 misses automatically. */
+let curAtk=null;
+const MELEE_RE=/melee|5 ft|hammer|sword|axe|mace|dagger|rapier|spear|blade|staff|club|flail|pick|whip|scimitar|glaive|halberd|lance|maul|trident/i;
+function isMeleeAttack(a){ const t=(a.name||"")+" "+(a.note||""); return a.melee===true||(a.melee!==false&&MELEE_RE.test(t)&&!/ranged/i.test(t)); }
 function rollAttack(a){
   const bonus=parseInt(String(a.bonus||"0").replace(/[^\d+-]/g,""),10)||0;
   const beams=Number((String(a.dmg).match(/[×x]\s*(\d+)\s*beams?/i)||[])[1])||1;
-  let dmgStr=String(a.dmg||"").replace(/[×x]\s*\d+\s*beams?/i,"");
-  let foot=a.dmg;
-  if(/weapon/i.test(dmgStr)){ const w=meleeWeapon(); if(w){ dmgStr=w.dmg+" "+dmgStr.replace(/weapon/i,""); foot=`${w.name} ${w.dmg} plus ${dmgStr.replace(w.dmg,"").trim()}`; } }
-  const lines=[];
-  for(let b=0;b<beams;b++){
-    const r=d20(), crit=r.n===20, nat1=r.n===1;
-    lines.push({label:beams>1?`Beam ${b+1} to hit`:"To hit",big:String(r.n+bonus),sub:`d20 ${r.txt} ${sgn(bonus)}${crit?" · CRITICAL":nat1?" · natural 1, miss":""}`,cls:crit?"crit":nat1?"miss":""});
-    const dm=rollDamage(dmgStr,crit);
-    if(dm){ let sub=dm.txt;
-      if(b===0&&isBlast(a)&&gatherPending()){ const g=rollDamage(S.kin.gather,crit); if(g){ dm.total+=g.total; sub+=` + Gather Power ${g.txt}`; } S.combat.gather=false; }
-      lines.push({label:beams>1?`Beam ${b+1} damage`:"Damage",big:String(dm.total),sub,cls:crit?"crit":""}); }
-  }
-  showRoll(a.name,lines,foot);
+  let dmgStr=String(a.dmg||"").replace(/[×x]\s*\d+\s*beams?/i,""), foot=a.dmg, melee=isMeleeAttack(a);
+  if(/weapon/i.test(dmgStr)){ const w=meleeWeapon(); melee=true; if(w){ dmgStr=w.dmg+" "+dmgStr.replace(/weapon/i,""); foot=`${w.name} ${w.dmg} plus ${dmgStr.replace(w.dmg,"").trim()}`; } }
+  const rows=[];
+  for(let b=0;b<beams;b++){ const r=d20(); rows.push({label:beams>1?`Beam ${b+1}`:"Attack",toHit:r.n+bonus,sub:`d20 ${r.txt} ${sgn(bonus)}`,crit:r.n===20,nat1:r.n===1,state:"?",dmg:null}); }
+  curAtk={title:a.name,foot,dmgStr,melee,blast:isBlast(a),rows};
+  rows.forEach((row,b)=>{ if(row.crit) atkResolve(b,true,true); else if(row.nat1) row.state="miss"; });
+  rollLog.unshift({title:a.name,lines:[],foot,t:Date.now()}); rollLog=rollLog.slice(0,8);
+  paintAttack();
 }
+function atkResolve(b,hit,quiet){
+  const c=curAtk, row=c&&c.rows[b]; if(!row||row.state!=="?") return;
+  row.state=hit?"hit":"miss";
+  if(hit){
+    const dm=rollDamage(c.dmgStr,row.crit)||{total:0,txt:""}; let total=dm.total; const parts=[dm.txt].filter(Boolean), notes=[];
+    if(c.blast&&gatherPending()){ const g=rollDamage(S.kin.gather,row.crit); if(g){ total+=g.total; parts.push(`Gather Power ${g.txt}`); } S.combat.gather=false; }
+    if(c.melee&&(S.riders||[]).length){ S.riders.forEach(rd=>{ const g=rollDamage(rd.dmg,row.crit); if(g){ total+=g.total; parts.push(`${rd.name} ${g.txt}`); } if(rd.note) notes.push(`${rd.name}: ${rd.note}`); }); S.riders=[]; }
+    row.dmg={total,sub:parts.join(" + ")}; row.notes=notes;
+  }
+  if(!quiet){ save(); paintAttack(); renderTrackerRiders(); }
+}
+function paintAttack(){
+  const c=curAtk; if(!c) return;
+  const box=document.getElementById("rollbox");
+  const riders=(S.riders||[]);
+  box.innerHTML=`<div class="rb-hd"><strong>${esc(c.title)}</strong><button class="x" data-a="rollClose" aria-label="Close roll">×</button></div>
+    ${c.rows.map((r,b)=>`<div class="rb-line ${r.crit?"crit":r.nat1||r.state==="miss"?"miss":""}"><span class="rb-lbl">${esc(r.label)} to hit</span><b>${r.toHit}</b><span class="rb-sub">${esc(r.sub)}${r.crit?" · CRITICAL":r.nat1?" · natural 1":""}</span></div>
+      ${r.state==="?"?`<div class="rb-ask"><span>Did it hit?</span><button class="btn pri" data-a="atkHit" data-i="${b}">Hit</button><button class="btn" data-a="atkMiss" data-i="${b}">Miss</button></div>`
+        :r.state==="hit"?`<div class="rb-line ${r.crit?"crit":""}"><span class="rb-lbl">${esc(r.label)} damage</span><b>${r.dmg.total}</b><span class="rb-sub">${esc(r.dmg.sub)}</span></div>${(r.notes||[]).map(n=>`<div class="rb-note">${esc(n)}</div>`).join("")}`
+        :`<div class="rb-note" style="color:var(--muted)">Miss: no damage.</div>`}`).join("")}
+    ${c.melee&&riders.length&&c.rows.some(r=>r.state==="?")?`<div class="rb-note">On a hit, also adds: ${esc(riders.map(r=>`${r.name} ${r.dmg}`).join(", "))}</div>`:""}
+    ${c.foot?`<div class="rb-foot">${esc(c.foot)}</div>`:""}`;
+  box.hidden=false; rollShownAt=Date.now();
+  rollLog[0]={title:c.title,lines:c.rows.map(r=>({label:r.label,big:r.state==="hit"?`${r.toHit} hit, ${r.dmg.total} dmg`:r.state==="miss"?`${r.toHit} miss`:`${r.toHit}`})),foot:c.foot,t:Date.now()};
+  const list=document.getElementById("rollRecent"); if(list) list.innerHTML=recentRollsHtml();
+}
+/* Smites: cast now, the damage waits for your next melee weapon hit */
+function isSmite(s){ return /smite/i.test(s.name||"") }
+function addRider(s,slot){
+  const src=S.sources[s.src]?casterStats(s.src):{dc:8+S.prof};
+  S.riders=(S.riders||[]).filter(r=>r.name!==s.name);
+  S.riders.push({name:s.name,dmg:spellDmgAt(s,slot),note:s.save?`${s.save} save DC ${src.dc}. ${s.note||""}`.trim():(s.note||"")});
+}
+function ridersHtml(){
+  const r=S.riders||[]; if(!r.length) return "";
+  return `<div class="riders">${r.map((x,i)=>`<span class="rider">Next melee hit: <strong>${esc(x.name)}</strong> ${esc(x.dmg)} <button class="btn sm ghost" data-a="riderDrop" data-i="${i}">Drop</button></span>`).join("")}</div>`;
+}
+function renderTrackerRiders(){ document.querySelectorAll(".riders-slot").forEach(el=>el.innerHTML=ridersHtml()); }
 /* Damage roll for an impulse, with its save DC */
 function rollImpulse(x){
   const dm=rollDamage(x.dmg); if(!dm) return;
@@ -672,6 +715,7 @@ function renderTurn(){
       <button class="btn pri" data-a="combatNext">Next turn</button><button class="btn ghost" data-a="combatEnd">End combat</button></div>
     ${S.kin?kinBar():""}
     ${rollModeChips()}
+    <div class="riders-slot">${ridersHtml()}</div>
     <div class="slots">
       ${slot("action","Action")}${slot("bonus","Bonus action")}${slot("reaction","Reaction")}
       <div class="slot move"><b>${c.move} ft</b><span>Movement left of ${speedNow()}</span>
@@ -740,6 +784,7 @@ function renderCombat(){
 
   <section class="card">
     <h2>Attacks <button class="btn sm" data-a="add" data-k="attacks">Add</button></h2>
+    <div class="riders-slot">${ridersHtml()}</div>
     ${S.attacks.map((a,i)=>`<div class="atk">
       <input class="in" data-b="attacks.${i}.name" value="${esc(a.name)}" aria-label="Attack name" style="font-weight:700">
       <input class="in" data-b="attacks.${i}.bonus" value="${esc(a.bonus)}" aria-label="To hit" style="text-align:center">
@@ -1054,7 +1099,7 @@ function doRest(kind){
     let regain=Math.max(1,Math.floor(totalLevel()/2));
     S.hd.slice().sort((a,b)=>b.die-a.die).forEach(h=>{const r=Math.min(h.used,regain);h.used-=r;regain-=r});
     if(S.exhaustion>0)S.exhaustion--;
-    S.conc=""; S.shield=false; S.bladesong=false; if(S.combat) S.combat.on=false; if(S.kin) S.kin.aura=false;
+    S.conc=""; S.shield=false; S.bladesong=false; S.riders=[]; if(S.combat) S.combat.on=false; if(S.kin) S.kin.aura=false;
     toast("Long rest done: HP, slots and features restored. You can change prepared spells and use Cantrip Formulas now.",4500);
   }
   save(); render();
@@ -1109,6 +1154,9 @@ document.addEventListener("click",e=>{
     case "spDmgClear": { const sp=S.spells[i]; delete sp.dmg; delete sp.up; closeModal(); save(); render(); return; }
     case "castCantripBtn": if(inCombat()) castCantrip(i); else rollSpell(S.spells[i],0); return;
     case "rollClose": document.getElementById("rollbox").hidden=true; return;
+    case "atkHit": atkResolve(i,true); return;
+    case "atkMiss": atkResolve(i,false); return;
+    case "riderDrop": S.riders.splice(i,1); save(); render(); return;
     case "rollCheck": { const [kind,key]=k.split(":"); rollCheck(kind,key); return; }
     case "deathRoll": { const r=roll(20); let res;
       if(r===20){ S.hp.cur=1; S.death={s:0,f:0}; res="Natural 20: you’re back with 1 HP!"; }
@@ -1150,7 +1198,7 @@ document.addEventListener("click",e=>{
     case "impUse": impUseModal(i); return;
     case "impConfirm": closeModal(); useImpulse(i,k); return;
     case "impConc": S.kin.impulses[i].c=!S.kin.impulses[i].c; save(); render(); return;
-    case "dropConc": S.conc=""; save(); render(); return;
+    case "dropConc": if(S.riders) S.riders=S.riders.filter(r=>r.name!==S.conc); S.conc=""; save(); render(); return;
     case "cond": { const c=S.conditions; const ix=c.indexOf(k); ix>=0?c.splice(ix,1):c.push(k); save(); render(); return; }
     case "exh": S.exhaustion=S.exhaustion===i?i-1:i; save(); render(); return;
     case "featUse": { const f=S.features[i]; const avail=f.max-f.used; f.used=j<avail?f.used+1:f.used-1; f.used=Math.max(0,Math.min(f.max,f.used)); save(); render(); return; }
@@ -1201,7 +1249,8 @@ document.addEventListener("click",e=>{
     case "castAt": { const s=S.spells[i];
       if(k==="pact") S.pact.used++; else if(k!=="ritual") S.slots[k].used++;
       if(k!=="ritual") spend(castTime(s.name));
-      rollSpell(s,k==="pact"?S.pact.level:k==="ritual"?s.lvl:Number(k));
+      { const lv=k==="pact"?S.pact.level:k==="ritual"?s.lvl:Number(k);
+        if(isSmite(s)&&s.dmg){ addRider(s,lv); spendWarn+=`${s.name} is ready: it adds ${spellDmgAt(s,lv)} to your next melee weapon hit. `; } else rollSpell(s,lv); }
       if(s.c) S.conc=s.name;
       closeModal(); save(); render(); toast(`Cast ${s.name}${k==="ritual"?" as a ritual":k==="pact"?" with a pact slot":" at "+ORD[k]+" level"}.`); return; }
     case "addSpell": if(!Object.keys(S.sources).length){ S.sources.main={label:"Spellcasting",abil:"int",prepares:false,level:1}; save(); } modal(`<h2>Add spell</h2>
