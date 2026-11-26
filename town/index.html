@@ -139,6 +139,23 @@ textarea.in{min-height:120px;resize:vertical}
 .src-warlock{border-left:4px solid var(--violet)} .src-wizard{border-left:4px solid var(--hex)} .src-sorcerer{border-left:4px solid var(--gold)}
 .lvlhd{font-family:var(--display);font-size:20px;margin:16px 0 2px;color:var(--muted)}
 
+/* kineticist */
+.vit.aura{border:0} .vit.aura b{color:var(--muted)}
+.vit.aura.on{background:var(--goldSoft)} .vit.aura.on b{color:var(--gold)}
+.aurabig{font-family:var(--display);font-size:44px;line-height:1;color:var(--muted)}
+.aurabig.on{color:var(--gold)}
+.imp{border-top:1px solid var(--line);padding:8px 4px}
+.imp .hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.imp .hd .nm{flex:1;min-width:150px}
+.imp .hd .nm .in{font-weight:600}
+.imp .eff{margin:2px 0 0 4px}
+.imp details summary{cursor:pointer;min-height:32px;display:flex;align-items:center}
+.imp .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px;margin-top:6px}
+.el-fire{color:var(--blood);border-color:var(--blood)} .el-air{color:var(--violet);border-color:var(--violet)}
+.el-earth{color:var(--gold);border-color:var(--gold)} .el-wood,.el-water,.el-metal{color:var(--hex);border-color:var(--hex)}
+.ty-Surge,.ty-Complex{color:var(--blood);border-color:var(--blood)} .ty-Stance{color:var(--gold);border-color:var(--gold)}
+.imp.stance-on{background:var(--goldSoft);border-radius:8px}
+
 /* coins/town */
 .coins{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
 .coin{text-align:center;background:var(--panel2);border-radius:12px;padding:8px}
@@ -326,8 +343,9 @@ function renderHeader(){
     return;
   }
   document.querySelectorAll('.rests [data-a="shortRest"],.rests [data-a="longRest"]').forEach(b=>b.hidden=!S);
-  const tabs0=[["combat","Combat"],["spells","Spells"],["character","Character"],["inventory","Inventory"],["town","Town"],["notes","Notes"],["sync","Sync"]];
-  document.getElementById("tabs").innerHTML=tabs0.map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" data-a="tab" data-k="${k}">${l}</button>`).join("");
+  if(!tabList().some(([k])=>k===tab)) tab="combat";
+  const tabsHtml=()=>tabList().map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" data-a="tab" data-k="${k}">${l}</button>`).join("");
+  document.getElementById("tabs").innerHTML=tabsHtml();
   if(!S){ document.getElementById("hName").textContent="No character"; document.getElementById("hSub").textContent="Tap to pick or start one"; document.getElementById("vitals").innerHTML=""; return; }
   document.title=(S.name||"Character")+" – Character";
   document.getElementById("hName").textContent=S.name||"Unnamed";
@@ -337,9 +355,16 @@ function renderHeader(){
     <div class="vit hp"><b>${S.hp.cur}${S.hp.temp?`<small style="color:var(--violet);font-size:16px"> +${S.hp.temp}</small>`:""}</b><span>HP / ${S.hp.max}</span></div>
     <div class="vit"><b>${acNow()}</b><span>AC${S.shield?" (Shield)":""}</span></div>
     <div class="vit"><b>${sgn(mod(S.abil.dex)+Number(S.initMisc||0))}</b><span>Init</span></div>
-    <div class="vit"><b>${S.speed}</b><span>Speed</span></div>${conc}`;
-  const tabs=[["combat","Combat"],["spells","Spells"],["character","Character"],["inventory","Inventory"],["town","Town"],["notes","Notes"],["sync","Sync"]];
-  document.getElementById("tabs").innerHTML=tabs.map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" data-a="tab" data-k="${k}">${l}</button>`).join("");
+    <div class="vit"><b>${S.speed}</b><span>Speed</span></div>${S.kin?`
+    <button class="vit aura ${S.kin.aura?"on":""}" data-a="aura" aria-pressed="${!!S.kin.aura}" title="Tap to turn your kinetic aura on or off"><b>${S.kin.aura?"On":"Off"}</b><span>Aura</span></button>`:""}${conc}`;
+}
+/* Spells tab is hidden for a kineticist with no spells; Impulses tab only shows for kineticists */
+function tabList(){
+  const t=[["combat","Combat"]];
+  if(S&&S.kin) t.push(["impulses","Impulses"]);
+  if(!S||!S.kin||S.spells.length||Object.keys(S.sources).length) t.push(["spells","Spells"]);
+  t.push(["character","Character"],["inventory","Inventory"],["town","Town"],["notes","Notes"],["sync","Sync"]);
+  return t;
 }
 
 /* ---------- combat ---------- */
@@ -471,6 +496,99 @@ ${S.pact.max>0?`      <div class="slotrow"><span class="lv" style="color:var(--v
   </section>`;
 }
 
+/* ---------- impulses (kineticist homebrew) ---------- */
+const IMP_TYPES=["Stance","Basic","Surge","Complex"];
+const IMP_TYPE_HELP={Stance:"Passive while the aura is on. One stance at a time.",Basic:"Aura stays on.",Surge:"Overflow: the aura goes out.",Complex:"Action + bonus action. Overflow: the aura goes out."};
+function kinStats(){const k=S.kin;const cm=mod(S.abil[k.abil||"con"]),bm=mod(S.abil[k.blastAbil||"dex"]);return {dc:8+S.prof+cm,atk:S.prof+cm,batk:S.prof+bm,bm}}
+function elClass(el){return "el-"+String(el||"").toLowerCase().split(/[^a-z]/)[0]}
+function renderImpulses(){
+  const k=S.kin, st=kinStats();
+  const stances=k.impulses.filter(x=>x.type==="Stance");
+  const byLvl={}; k.impulses.forEach((x,i)=>{(byLvl[x.lvl]??=[]).push({...x,i})});
+  const buf=S.features.find(f=>/internal buffer/i.test(f.name));
+  return `
+  <div class="casters">
+    <div class="caster src-sorcerer"><b>Impulses</b><div class="nums"><div><strong>${st.dc}</strong>Save DC</div><div><strong>${sgn(st.atk)}</strong>Attack</div><div><strong>${(k.abil||"con").toUpperCase()}</strong>Ability</div></div></div>
+    <div class="caster src-warlock"><b>Elemental blast</b><div class="nums"><div><strong>${sgn(st.batk)}</strong>To hit</div><div><strong>${esc(k.blast.dice)}${sgn(st.bm)}</strong>Damage</div><div><strong>×${Number(k.blast.count)||1}</strong>Per action</div></div></div>
+    <div class="caster src-wizard"><b>Impulse level</b><div class="nums"><div><strong>${ORD[Number(k.ilvl)||1]}</strong>Manifest at</div><div><strong>+${esc(k.gather)}</strong>Gather Power</div></div></div>
+  </div>
+  <div class="grid">
+    <section class="card">
+      <h2>Kinetic aura</h2>
+      <div class="row" style="gap:16px">
+        <span class="aurabig ${k.aura?"on":""}">${k.aura?"On":"Off"}</span>
+        <button class="btn ${k.aura?"":"gold"}" data-a="aura">${k.aura?"Dismiss aura":"Channel elements (bonus action)"}</button>
+      </div>
+      <p class="muted small">${esc(k.auraNote)}</p>
+      <label class="small muted">Stance <select class="in" data-b="kin.stance" style="margin-top:2px">
+        <option value="" ${k.stance?"":"selected"}>No stance</option>
+        ${stances.map(x=>`<option ${k.stance===x.name?"selected":""}>${esc(x.name)}</option>`).join("")}</select></label>
+      ${k.stance&&!k.aura?`<p class="small" style="color:var(--gold)">${esc(k.stance)} works again once you channel your aura.</p>`:""}
+      ${buf?`<p class="small muted">Internal Buffer: ${buf.max-buf.used}/${buf.max} left (keeps the aura on after an overflow).</p>`:""}
+    </section>
+    <section class="card">
+      <h2>Elemental blast</h2>
+      <p style="margin-top:0"><strong>${sgn(st.batk)} to hit, ${esc(k.blast.dice)}${sgn(st.bm)}</strong>, ${Number(k.blast.count)||1} attacks per action. Needs the aura and a free hand.</p>
+      <label class="small muted">Range and damage types<input class="in" data-b="kin.blast.range" value="${esc(k.blast.range)}" style="margin:2px 0 8px;color:var(--ink)"></label>
+      <div class="row small muted">
+        <label>Die <input class="in num" data-b="kin.blast.dice" value="${esc(k.blast.dice)}" style="width:70px"></label>
+        <label>Attacks <input class="in num" type="number" min="1" max="4" data-b="kin.blast.count" value="${k.blast.count}" style="width:56px"></label>
+        <label>Gather Power <input class="in num" data-b="kin.gather" value="${esc(k.gather)}" style="width:70px"></label>
+        <label>Impulse level <input class="in num" type="number" min="1" max="9" data-b="kin.ilvl" value="${k.ilvl}" style="width:56px"></label>
+      </div>
+      <p class="muted small">Gather Power: bonus action if you haven’t moved or acted this turn. Speed 0 until your next turn, and your first blast (or Basic impulse) this turn adds the dice. Empowering a Basic impulse overflows.</p>
+    </section>
+  </div>
+  <section class="card" style="margin-top:16px">
+    <h2>Impulses <button class="btn sm" data-a="add" data-k="kin.impulses">Add impulse</button></h2>
+    <div class="chips small" style="margin-bottom:4px">${IMP_TYPES.map(t=>`<span class="tag ty-${t}" style="min-height:0">${t}: ${IMP_TYPE_HELP[t]}</span>`).join("")}</div>
+    ${Object.keys(byLvl).sort((a,b)=>a-b).map(l=>`<div class="lvlhd">${ORD[l]||l} level</div>
+      ${byLvl[l].map(x=>`<div class="imp ${x.type==="Stance"&&k.stance===x.name&&k.aura?"stance-on":""}">
+        <div class="hd">
+          <div class="nm"><input class="in bare" data-b="kin.impulses.${x.i}.name" value="${esc(x.name)}" aria-label="Impulse name"></div>
+          ${x.el?`<span class="tag ${elClass(x.el)}">${esc(x.el)}</span>`:""}
+          <span class="tag ty-${esc(x.type)}">${esc(x.type)}</span>
+          ${x.c?`<span class="tag on" title="Concentration">C</span>`:""}
+          ${x.type==="Stance"?`<button class="btn sm ${k.stance===x.name?"":"pri"}" data-a="impUse" data-i="${x.i}">${k.stance===x.name?"Active stance":"Use stance"}</button>`:`<button class="btn sm ${x.type==="Basic"?"pri":"dmg"}" data-a="impUse" data-i="${x.i}">Use</button>`}
+        </div>
+        <div class="eff small">${esc([x.act,x.range,x.dmg].filter(Boolean).join(" · "))}</div>
+        <details><summary class="muted small">Details and edit</summary>
+          <textarea class="in bare small" data-b="kin.impulses.${x.i}.text" rows="3" style="min-height:0">${esc(x.text)}</textarea>
+          <div class="grid2 small muted">
+            <label>Element<input class="in" data-b="kin.impulses.${x.i}.el" value="${esc(x.el)}"></label>
+            <label>Level<input class="in" type="number" min="1" max="9" data-b="kin.impulses.${x.i}.lvl" value="${x.lvl}"></label>
+            <label>Type<select class="in" data-b="kin.impulses.${x.i}.type">${IMP_TYPES.map(t=>`<option ${x.type===t?"selected":""}>${t}</option>`).join("")}</select></label>
+            <label>Action<input class="in" data-b="kin.impulses.${x.i}.act" value="${esc(x.act)}"></label>
+            <label>Range / area<input class="in" data-b="kin.impulses.${x.i}.range" value="${esc(x.range)}"></label>
+            <label>Damage / save<input class="in" data-b="kin.impulses.${x.i}.dmg" value="${esc(x.dmg)}"></label>
+          </div>
+          <div class="row" style="margin-top:6px"><button class="tag ${x.c?"on":""}" data-a="impConc" data-i="${x.i}">Concentration</button><span style="flex:1"></span><button class="x" data-a="del" data-k="kin.impulses" data-i="${x.i}" aria-label="Remove impulse">×</button></div>
+        </details>
+      </div>`).join("")}`).join("")||`<p class="muted">No impulses yet. Add your first one.</p>`}
+    <p class="muted small" style="margin-top:12px">Impulses aren’t spells and use no slots. They do count as spells for Counterspell, Dispel Magic and Detect Magic. You need a free hand. Overflow puts your aura out until the start of your next turn.</p>
+  </section>`;
+}
+function impUseModal(i){
+  const x=S.kin.impulses[i], k=S.kin;
+  if(x.type==="Stance"){ k.stance=k.stance===x.name?"":x.name; save(); render(); toast(k.stance?(k.aura?`${x.name} is your stance now.`:`${x.name} is set. It works once you channel your aura.`):"No stance."); return; }
+  if(x.type==="Basic"){ useImpulse(i,"keep"); return; }
+  const buf=S.features.find(f=>/internal buffer/i.test(f.name));
+  const bufLeft=buf?buf.max-buf.used:0;
+  modal(`<h2>${esc(x.name)}</h2><p class="muted">${x.type==="Complex"?"Takes your action and bonus action. ":""}This impulse overflows: ${k.aura?"your aura goes out until the start of your next turn.":"your aura is already off."}${k.aura&&/cyclonic/i.test(k.stance)?" <strong>Cyclonic Ascent ends with it, so you start to fall.</strong>":""}</p>
+    ${x.dmg?`<p><strong>${esc(x.dmg)}</strong></p>`:""}
+    <button class="btn dmg" data-a="impConfirm" data-i="${i}" data-k="out" style="text-align:center">Use it${k.aura?" (aura goes out)":""}</button>
+    ${k.aura&&bufLeft>0?`<button class="btn gold" data-a="impConfirm" data-i="${i}" data-k="buffer" style="text-align:center">Use Internal Buffer: aura stays on (${bufLeft} left)</button>`:""}`);
+}
+function useImpulse(i,how){
+  const x=S.kin.impulses[i], k=S.kin;
+  if(how==="buffer"){ const buf=S.features.find(f=>/internal buffer/i.test(f.name)); if(buf) buf.used=Math.min(buf.max,buf.used+1); }
+  const wasFlying=k.aura&&/cyclonic/i.test(k.stance);
+  if(how==="out") k.aura=false;
+  if(x.c) S.conc=x.name;
+  save(); render();
+  toast(`${x.name}${x.dmg?": "+x.dmg:""}.${how==="out"&&wasFlying?" You’re falling: use Air Cushion or take the fall.":how==="out"?" Aura is out until your next turn.":""}`,4000);
+}
+
 /* ---------- character ---------- */
 function renderCharacter(){
   const pp=10+mod(S.abil.wis)+(S.skills.perception?S.prof*S.skills.perception:0);
@@ -587,7 +705,7 @@ function render(){
   const y=window.scrollY;
   const m=document.getElementById("main");
   if(!S&&!["town","sync"].includes(tab)){ m.innerHTML=renderNoChar(); window.scrollTo(0,y); return; }
-  m.innerHTML={combat:renderCombat,spells:renderSpells,character:renderCharacter,inventory:renderInventory,town:renderTown,notes:renderNotes,sync:renderSync}[tab]();
+  m.innerHTML={combat:renderCombat,impulses:renderImpulses,spells:renderSpells,character:renderCharacter,inventory:renderInventory,town:renderTown,notes:renderNotes,sync:renderSync}[tab]();
   window.scrollTo(0,y);
 }
 
@@ -612,7 +730,7 @@ function doRest(kind){
     let regain=Math.max(1,Math.floor(totalLevel()/2));
     S.hd.slice().sort((a,b)=>b.die-a.die).forEach(h=>{const r=Math.min(h.used,regain);h.used-=r;regain-=r});
     if(S.exhaustion>0)S.exhaustion--;
-    S.conc=""; S.shield=false;
+    S.conc=""; S.shield=false; if(S.kin) S.kin.aura=false;
     toast("Long rest done: HP, slots and features restored. You can change prepared spells and use Cantrip Formulas now.",4500);
   }
   save(); render();
@@ -650,6 +768,11 @@ document.addEventListener("click",e=>{
       save(); render(); return; }
     case "death": { const cur=S.death[k]; S.death[k]=cur>i?i:i+1; save(); render(); return; }
     case "toggleShield": S.shield=!S.shield; save(); render(); return;
+    case "aura": { if(!S||!S.kin) return; const k=S.kin; const fly=k.aura&&/cyclonic/i.test(k.stance); k.aura=!k.aura; save(); render();
+      toast(k.aura?(k.stance?`Aura on. Stance: ${k.stance}.`:"Aura on. No stance picked."):fly?"Aura off. Cyclonic Ascent ends, so you fall unless something holds you up.":"Aura off."); return; }
+    case "impUse": impUseModal(i); return;
+    case "impConfirm": closeModal(); useImpulse(i,k); return;
+    case "impConc": S.kin.impulses[i].c=!S.kin.impulses[i].c; save(); render(); return;
     case "dropConc": S.conc=""; save(); render(); return;
     case "cond": { const c=S.conditions; const ix=c.indexOf(k); ix>=0?c.splice(ix,1):c.push(k); save(); render(); return; }
     case "exh": S.exhaustion=S.exhaustion===i?i-1:i; save(); render(); return;
@@ -714,11 +837,12 @@ document.addEventListener("click",e=>{
     case "gp": { const inp=document.getElementById("gpAmt"); const n=Math.floor(Number(inp.value)||0); if(!n){inp.focus();return;} S.coins.gp=Number(S.coins.gp)+n*Number(k); save(); render(); toast(`${k==="1"?"Added":"Spent"} ${fmt(n)} gp.`); return; }
     case "add": {
       const blank={attacks:{name:"New attack",bonus:"+0",dmg:"",note:""},features:{name:"New feature",max:0,used:0,reset:"none",text:""},items:{name:"",qty:1,note:"",attune:false},
-        "town.income":{name:"New income",amt:0},"town.expenses":{name:"New expense",amt:0},"town.stats":{name:"New stat",val:0},"town.projects":{name:"",cost:0,status:"Planned"}}[k];
+        "town.income":{name:"New income",amt:0},"town.expenses":{name:"New expense",amt:0},"town.stats":{name:"New stat",val:0},"town.projects":{name:"",cost:0,status:"Planned"},
+        "kin.impulses":{name:"New impulse",el:"",lvl:1,type:"Basic",act:"Action",range:"",dmg:"",text:"",c:false}}[k];
       getP(k).push(clone(blank)); save(); render(); return; }
     case "del": { const arr=getP(k); const label=arr[i]?.name||"this"; modal(`<h2>Remove ${esc(label)}?</h2><button class="btn dmg" data-a="confirmDel" data-k="${k}" data-i="${i}" style="text-align:center">Remove</button>`); return; }
     case "confirmDel": getP(k).splice(i,1); closeModal(); save(); render(); return;
-    case "endTurn": { const net=townNet(); const T=T;
+    case "endTurn": { const net=townNet();
       modal(`<h2>End turn ${T.turn}?</h2><p>Income ${fmt(T.income.reduce((a,x)=>a+Number(x.amt||0),0))} gp, expenses ${fmt(T.expenses.reduce((a,x)=>a+Number(x.amt||0),0))} gp.</p>
       <p>Treasury goes from <strong>${fmt(T.treasury)}</strong> to <strong class="${net>=0?"pos":"neg"}">${fmt(T.treasury+net)} gp</strong>.</p>
       <button class="btn gold" data-a="confirmTurn" style="text-align:center">End turn</button>`); return; }
