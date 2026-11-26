@@ -60,8 +60,8 @@ The GM only sees towns that were shared with him, never anyone's characters.
 When Claude provides new files:
 
 ```powershell
-Copy-Item -Path "D:\Downloads\<unzipped folder>\*" -Destination "D:\dnd-sheet\dnd-sheet" -Recurse -Force
-cd D:\dnd-sheet\dnd-sheet
+Copy-Item -Path "D:\Downloads\<unzipped folder>\*" -Destination "D:\repositories\dnd-sheet\dnd-sheet-repo" -Recurse -Force
+cd D:\repositories\dnd-sheet\dnd-sheet-repo
 git add -A
 git commit -m "Describe the update"
 git push
