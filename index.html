@@ -184,6 +184,11 @@ h3+.feat{border-top:0}
 .opts h3{margin:10px 0 4px}
 .obtns{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px}
 .btn.imp-ov{border-color:var(--blood)}
+.kinbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 12px;margin-bottom:10px;border-radius:12px;background:var(--panel2);border:2px solid var(--line)}
+.kinbar.on{background:var(--goldSoft);border-color:var(--gold)}
+.kb-state{min-width:130px} .kb-state b{display:block;font-family:var(--display);font-size:22px;line-height:1.1} .kb-state span{font-size:13px;color:var(--muted)}
+.kinbar.on .kb-state b{color:var(--gold)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
 .vit.turnvit{border:0;background:var(--hexSoft)} .vit.turnvit b{color:var(--hex);font-size:18px}
 
 /* coins/town */
@@ -491,14 +496,25 @@ function spend(kind){
   if(c[kind]&&!spentTwice.includes(SLOT_NAME[kind])){ spentTwice.push(SLOT_NAME[kind]); spendWarn=`Already used your ${spentTwice.join(" and ")} this turn! `; }
   c[kind]=true;
 }
-/* Cantrip during combat. With Extra Attack (not kineticist), a 1-action cantrip can replace one remaining attack. */
+/* Cantrip during combat. With Extra Attack (not kineticist), each 1-action cantrip can take the place of a remaining attack (table ruling: both swings can be cantrips). */
 function castCantrip(i,line){
   const s=S.spells[i], c=S.combat, ct=castTime(s.name);
   const info=line?`: ${line.bonus} to hit, ${line.dmg}`:"";
-  if(ct==="action"&&c.atk>0&&c.atkKind==="weapon"&&!S.kin){ c.atk--; save(); render(); toast(`${s.name} in place of an attack${info}.${c.atk?` ${c.atk} more attack${c.atk>1?"s":""} this turn.`:""}`,4500); return; }
+  if(ct==="action"&&c.atk>0&&c.atkKind==="weapon"&&!S.kin){ c.atk--; save(); render(); toast(`${s.name} as an attack${info}.${c.atk?` ${c.atk} more attack or cantrip this turn.`:""}`,4500); return; }
   spend(ct);
   if(ct==="action"&&!S.kin&&S.features.some(f=>/^extra attack/i.test(f.name))){ c.atk=attacksPer()-1; c.atkKind="weapon"; }
-  save(); render(); toast(`${s.name}${info}.${c.atk?` You can still make ${c.atk} weapon attack${c.atk>1?"s":""} (Extra Attack).`:""}`,4500);
+  save(); render(); toast(`${s.name}${info}.${c.atk?` You still have ${c.atk} more attack or cantrip (Extra Attack).`:""}`,4500);
+}
+/* Kineticist: aura + stance in one tap during combat */
+function kinBar(){
+  const k=S.kin, c=S.combat, locked=c.auraLock===c.round;
+  const stances=k.impulses.map((x,i)=>({x,i})).filter(o=>o.x.type==="Stance");
+  return `<div class="kinbar ${k.aura?"on":""}">
+    <div class="kb-state"><b>Aura ${k.aura?"on":"off"}</b><span>${k.aura?(k.stance?esc(k.stance):"No stance"):locked?"Overflowed: back next turn":"Bonus action to channel"}</span></div>
+    <div class="obtns" style="margin:0;flex:1">
+      ${k.aura?stances.map(o=>`<button class="btn sm ${k.stance===o.x.name?"gold":""}" data-a="tStance" data-i="${o.i}">${esc(o.x.name)}</button>`).join("")+`<button class="btn sm ghost" data-a="aura">Dismiss</button>`
+        :stances.map(o=>`<button class="btn gold" data-a="tChannel" data-i="${o.i}" ${locked?"disabled":""}>Channel: ${esc(o.x.name)}</button>`).join("")+`<button class="btn" data-a="tChannel" data-i="-1" ${locked?"disabled":""}>Channel, no stance</button>`}
+    </div></div>`;
 }
 function startCombat(){ S.combat={on:true,round:1,action:false,bonus:false,reaction:false,move:speedNow(),atk:0}; save(); render(); toast("Combat started. Round 1."); }
 function nextTurn(){ const c=S.combat; c.round++; c.action=c.bonus=c.reaction=false; c.atk=0; c.move=speedNow(); save(); render(); toast(`Round ${c.round}: action, bonus action, reaction and movement are back.`); }
@@ -513,14 +529,15 @@ function renderTurn(){
   const opt=(a,label,attrs="",cls="")=>`<button class="btn sm ${cls}" data-a="${a}" ${attrs}>${label}</button>`;
   const stdBtns=slots=>stdOf(slots).map(x=>opt("tStd",x.n,`data-i="${x.j}"`,"ghost")).join("");
   // Action options
-  const atk=S.attacks.map((a,i)=>opt("tAttack",`${esc(a.name)} <span class="muted">${esc(a.bonus)}${attacksPer(a)>1?` · ×${attacksPer(a)}`:""}</span>`,`data-i="${i}"`)).join("");
+  const atkNames=new Set(S.attacks.map(a=>String(a.name||"").toLowerCase()));
+  const isCantripLine=a=>S.spells.some(s=>s.lvl===0&&s.name.toLowerCase()===String(a.name||"").toLowerCase());
+  const atk=S.attacks.map((a,i)=>opt("tAttack",`${esc(a.name)} <span class="muted">${esc(a.bonus)}${isCantripLine(a)?" · cantrip":attacksPer(a)>1?` · ×${attacksPer(a)}`:""}</span>`,`data-i="${i}"`)).join("");
   const imps=S.kin?S.kin.impulses.map((x,i)=>({x,i,t:impTime(x)})):[];
   const ready=S.spells.map((s,i)=>({...s,i})).filter(s=>isReady(s));
-  const spellBtns=kind=>ready.filter(s=>castTime(s.name)===kind).map(s=>opt("tCast",`${esc(s.name)}${s.lvl?` <span class="muted">${ORD[s.lvl]}</span>`:""}`,`data-i="${s.i}"`)).join("");
+  const spellBtns=kind=>ready.filter(s=>castTime(s.name)===kind&&!(s.lvl===0&&atkNames.has(s.name.toLowerCase()))).map(s=>opt("tCast",`${esc(s.name)}${s.lvl?` <span class="muted">${ORD[s.lvl]}</span>`:""}`,`data-i="${s.i}"`)).join("");
   const impBtns=kind=>imps.filter(o=>o.t[0]===kind).map(o=>opt("impUse",`${esc(o.x.name)}${o.t.length>1?` <span class="muted">+ bonus</span>`:""}`,`data-i="${o.i}"`,o.x.type==="Basic"?"":"imp-ov")).join("");
   const curse=S.features.map((f,i)=>({f,i})).find(o=>/hexblade.s curse/i.test(o.f.name));
   const bonusOpts=[
-    S.kin&&!S.kin.aura?opt("aura","Channel elements (aura on)","","gold"):"",
     S.kin?opt("tGather","Gather Power"):"",
     bsFeature()&&!S.bladesong?opt("bladesong",`Bladesong <span class="muted">${bsFeature().max-bsFeature().used} left</span>`,"","gold"):"",
     curse?opt("tFeat",`${esc(curse.f.name)} <span class="muted">${curse.f.max-curse.f.used} left</span>`,`data-i="${curse.i}" data-k="bonus"`):"",
@@ -530,12 +547,13 @@ function renderTurn(){
   return `<section class="card turn" style="grid-column:1/-1">
     <div class="row" style="margin-bottom:10px"><h2 style="margin:0;flex:1">Round ${c.round}</h2>
       <button class="btn pri" data-a="combatNext">Next turn</button><button class="btn ghost" data-a="combatEnd">End combat</button></div>
+    ${S.kin?kinBar():""}
     <div class="slots">
       ${slot("action","Action")}${slot("bonus","Bonus action")}${slot("reaction","Reaction")}
       <div class="slot move"><b>${c.move} ft</b><span>Movement left of ${speedNow()}</span>
         <div class="row" style="justify-content:center;gap:4px;margin-top:4px">${[5,10,15,30].map(n=>`<button class="btn sm" data-a="tMove" data-k="${n}" aria-label="Move ${n} feet">−${n}</button>`).join("")}<button class="btn sm ghost" data-a="tMove" data-k="reset">Reset</button></div></div>
     </div>
-    ${c.atk>0?`<p class="atkleft">Attack action: <strong>${c.atk} more attack${c.atk>1?"s":""}</strong> this turn${S.kin?"":" (one can be a cantrip)"}.</p>`:""}
+    ${c.atk>0?`<p class="atkleft">Attack action: <strong>${c.atk} more attack${c.atk>1?"s":""}</strong> this turn${S.kin?"":" (attacks or cantrips)"}.</p>`:""}
     <div class="opts">
       <div><h3>Action</h3>
         ${atk?`<div class="muted small">Attack (×N = attacks per Attack action)</div><div class="obtns">${atk}</div>`:""}
@@ -760,7 +778,7 @@ function useImpulse(i,how){
   const x=S.kin.impulses[i], k=S.kin;
   if(how==="buffer"){ const buf=S.features.find(f=>/internal buffer/i.test(f.name)); if(buf) buf.used=Math.min(buf.max,buf.used+1); }
   const wasFlying=k.aura&&/cyclonic/i.test(k.stance);
-  if(how==="out") k.aura=false;
+  if(how==="out"){ if(k.aura&&inCombat()) S.combat.auraLock=S.combat.round; k.aura=false; }
   impTime(x).forEach(t=>spend(t));
   if(x.c) S.conc=x.name;
   save(); render();
@@ -946,7 +964,7 @@ document.addEventListener("click",e=>{
       save(); render(); return; }
     case "death": { const cur=S.death[k]; S.death[k]=cur>i?i:i+1; save(); render(); return; }
     case "toggleShield": S.shield=!S.shield; save(); render(); return;
-    case "aura": { if(!S||!S.kin) return; const k=S.kin; const fly=k.aura&&/cyclonic/i.test(k.stance); k.aura=!k.aura; if(k.aura) spend("bonus"); save(); render();
+    case "aura": { if(!S||!S.kin) return; const k=S.kin; const fly=k.aura&&/cyclonic/i.test(k.stance); k.aura=!k.aura; if(k.aura){ spend("bonus"); if(inCombat()&&S.combat.auraLock===S.combat.round) spendWarn+="Your aura overflowed this round, so normally it can’t come back until your next turn. "; } save(); render();
       toast(k.aura?(k.stance?`Aura on. Stance: ${k.stance}.`:"Aura on. No stance picked."):fly?"Aura off. Cyclonic Ascent ends, so you fall unless something holds you up.":"Aura off."); return; }
     case "bladesong": { const f=bsFeature(); if(!f) return;
       if(S.bladesong){ S.bladesong=false; if(inCombat()) S.combat.move=Math.max(0,S.combat.move-10); save(); render(); toast("Bladesong ended."); return; }
@@ -955,6 +973,8 @@ document.addEventListener("click",e=>{
       if(f.max>0) f.used++; S.bladesong=true; spend("bonus"); save(); render();
       toast(`Bladesong (1 minute): AC +${bsBonus()}, speed +10 ft, advantage on Acrobatics, +${bsBonus()} on concentration saves. Ends with medium or heavy armor, a shield, or a two-handed attack.`,6000); return; }
     case "combatStart": startCombat(); return;
+    case "tChannel": { const k=S.kin; k.stance=i>=0?k.impulses[i].name:""; k.aura=true; spend("bonus"); save(); render(); toast(`Aura on${k.stance?`, ${k.stance}`:""}.`); return; }
+    case "tStance": { const k=S.kin; k.stance=k.impulses[i].name; save(); render(); toast(`Stance: ${k.stance}.`); return; }
     case "combatNext": nextTurn(); return;
     case "combatEnd": S.combat.on=false; save(); render(); toast("Combat ended."); return;
     case "slotToggle": S.combat[k]=!S.combat[k]; save(); render(); return;
