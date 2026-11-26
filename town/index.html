@@ -598,7 +598,7 @@ function renderHeader(){
     <div class="vit"><b>${acNow()}</b><span>AC${S.shield?" (Shield)":""}</span></div>
     <div class="vit"><b>${sgn(mod(S.abil.dex)+Number(S.initMisc||0))}</b><span>Init</span></div>
     <div class="vit"><b>${speedNow()}</b><span>Speed</span></div>${inCombat()?`
-    <button class="vit turnvit" data-a="tab" data-k="combat" title="Open the turn tracker"><b>${["action","bonus","reaction"].map(k=>S.combat[k]?"·":k==="action"?"A":k==="bonus"?"B":"R").join(" ")}</b><span>Round ${S.combat.round}</span></button>`:""}${bsFeature()?`
+    <button class="vit turnvit" data-a="tab" data-k="combat" title="Open the turn tracker"><b>${["action","bonus","reaction"].map(k=>S.combat[k]?"·":k==="action"?"A":k==="bonus"?"B":"R").join(" ")}</b><span>Round ${S.combat.round}${curCombatLog()?` · Init ${curCombatLog().init}`:""}</span></button>`:""}${bsFeature()?`
     <button class="vit aura ${S.bladesong?"on":""}" data-a="bladesong" aria-pressed="${!!S.bladesong}" title="Tap to start or end Bladesong"><b>${S.bladesong?"On":"Off"}</b><span>Bladesong</span></button>`:""}${S.kin?`
     <button class="vit aura ${S.kin.aura?"on":""}" data-a="aura" aria-pressed="${!!S.kin.aura}" title="Tap to turn your kinetic aura on or off"><b>${S.kin.aura?"On":"Off"}</b><span>Aura</span></button>`:""}${conc}`;
 }
@@ -700,14 +700,20 @@ function rollModeChips(){ const m=rollMode(); return `<div class="chips" style="
 function startCombat(){
   S.combat={on:true,round:1,action:false,bonus:false,reaction:false,move:speedNow(),atk:0};
   const im=mod(S.abil.dex)+Number(S.initMisc||0), r=d20(); S.combat.init=r.n+im;
+  // Every combat is kept in a short history (newest first): when, initiative, rounds
+  S.combats=[{at:Date.now(),init:r.n+im,roll:r.n,rounds:1,ended:false},...(S.combats||[])].slice(0,30);
   save(); render();
   showRoll("Initiative",[{label:"Initiative",big:String(r.n+im),sub:`d20 ${r.txt} ${sgn(im)}`,cls:r.n===20?"crit":r.n===1?"miss":""}],"Tell your GM, then tap Next turn at the start of each of your turns.");
 }
-function nextTurn(){ const c=S.combat; c.round++; c.action=c.bonus=c.reaction=false; c.atk=0; c.gather=false; c.cantripSwap=false; c.move=speedNow(); save(); render(); toast(`Round ${c.round}: action, bonus action, reaction and movement are back.`); }
+function curCombatLog(){ return S.combats&&S.combats[0]&&!S.combats[0].ended?S.combats[0]:null }
+function nextTurn(){ const c=S.combat; c.round++; const lg=curCombatLog(); if(lg) lg.rounds=c.round; c.action=c.bonus=c.reaction=false; c.atk=0; c.gather=false; c.cantripSwap=false; c.move=speedNow(); save(); render(); toast(`Round ${c.round}: action, bonus action, reaction and movement are back.`); }
 function renderTurn(){
   if(!inCombat()) return `<section class="card turn" style="grid-column:1/-1"><div class="row"><h2 style="margin:0;flex:1">Turn tracker</h2><button class="btn pri" data-a="combatStart">Start combat</button></div>
     <p class="muted small" style="margin:6px 0 0">Tracks your action, bonus action, reaction and movement each round, and marks them when you attack, cast or use an impulse. Attack buttons roll the dice for you.</p>
     <div style="margin-top:8px">${rollModeChips()}</div>
+    ${(S.combats||[]).length?`<details style="margin-top:8px"><summary class="muted small">Past combats (${S.combats.length})</summary>
+      <div class="list" style="margin-top:6px">${S.combats.map(x=>`<div class="li"><span class="n small">${esc(new Date(x.at).toLocaleString(undefined,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}))}</span><span class="small muted">${x.rounds} round${x.rounds>1?"s":""}</span><span class="v" title="Initiative">${x.init}</span></div>`).join("")}</div>
+      <p class="muted small">Right number = your initiative.</p></details>`:""}
     <details style="margin-top:8px"><summary class="muted small">Common actions</summary>
       ${[["Action",["action","attack"]],["Bonus action",["bonus"]],["Reaction",["reaction"]],["Movement and free",["move","free"]]].map(([h,sl])=>`<h3>${h}</h3>${stdOf(sl).map(x=>`<div class="small" style="margin-bottom:4px"><strong>${x.n}</strong> <span class="muted">${x.d}</span></div>`).join("")}`).join("")}
     </details></section>`;
@@ -731,6 +737,7 @@ function renderTurn(){
   const reactOpts=[stdBtns(["reaction"]), spellBtns("reaction"), impBtns("reaction")].join("");
   return `<section class="card turn" style="grid-column:1/-1">
     <div class="row" style="margin-bottom:10px"><h2 style="margin:0;flex:1">Round ${c.round}</h2>
+      ${curCombatLog()?`<label class="small muted">Initiative <input class="in num" type="number" data-b="combats.0.init" value="${curCombatLog().init}" style="width:64px" aria-label="Initiative"></label>`:""}
       <button class="btn pri" data-a="combatNext">Next turn</button><button class="btn ghost" data-a="combatEnd">End combat</button></div>
     ${S.kin?kinBar():""}
     ${rollModeChips()}
@@ -1191,7 +1198,7 @@ document.addEventListener("click",e=>{
     case "tChannel": { const k=S.kin; k.stance=i>=0?k.impulses[i].name:""; k.aura=true; spend("bonus"); save(); render(); toast(`Aura on${k.stance?`, ${k.stance}`:""}.`); return; }
     case "tStance": { const k=S.kin; k.stance=k.impulses[i].name; save(); render(); toast(`Stance: ${k.stance}.`); return; }
     case "combatNext": nextTurn(); return;
-    case "combatEnd": S.combat.on=false; save(); render(); toast("Combat ended."); return;
+    case "combatEnd": { S.combat.on=false; const lg=curCombatLog(); if(lg){ lg.ended=true; lg.rounds=S.combat.round; } save(); render(); toast("Combat ended. Initiative saved under Past combats."); return; }
     case "slotToggle": S.combat[k]=!S.combat[k]; save(); render(); return;
     case "tMove": { const c=S.combat; c.move=k==="reset"?speedNow():Math.max(0,c.move-Number(k)); save(); render(); return; }
     case "tAttack": { const a=S.attacks[i];
