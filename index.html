@@ -487,6 +487,36 @@ function rollImpulse(x){
   if(sv) lines.unshift({label:"Save",big:`DC ${kinStats().dc}`,sub:`${sv} save${/half/i.test(x.dmg)?", half on a success":""}`});
   showRoll(x.name,lines,x.dmg+extra);
 }
+/* ---------- spell damage ----------
+   spell.dmg = damage at its own level ("8d6 fire", "1d10+5 force ×2 beams", "+1d8 thunder")
+   spell.up  = extra per slot level above ("1d6", or a number like "5")
+   spell.hit = "attack" (spell attack) | "save" | "weapon" (melee weapon attack + dmg) | "auto" (just damage)
+   spell.save = save ability for "save" */
+const HIT_TYPES=[["attack","Spell attack roll"],["save","Saving throw"],["weapon","Melee weapon attack + this damage"],["auto","Just roll the damage"]];
+function scaleDice(up,n){ const m=String(up||"").trim().match(/^(\d*)d(\d+)(.*)$/i); if(m) return `${(Number(m[1]||1))*n}d${m[2]}${m[3]||""}`; const f=parseInt(up,10); return isNaN(f)?"":`+${f*n}`; }
+function spellDmgAt(s,slot){ let d=s.dmg||""; const above=slot&&slot>s.lvl?slot-s.lvl:0; if(above&&s.up){ const extra=scaleDice(s.up,above); if(extra) d+=extra.startsWith("+")?extra:` + ${extra}`; } return d; }
+function spellLabel(s){ if(!s.dmg) return ""; const h=s.hit||"auto"; return `${s.dmg}${s.up?` (+${s.up}/slot level)`:""}${h==="save"?` · ${s.save||"Dex"} save`:h==="attack"?" · spell attack":h==="weapon"?" · with a melee weapon attack":""}`; }
+function rollSpell(s,slot){
+  if(!s||!s.dmg) return;
+  const src=S.sources[s.src]?casterStats(s.src):{dc:8+S.prof,atk:S.prof};
+  const d=spellDmgAt(s,slot), h=s.hit||"auto", title=slot&&slot>s.lvl?`${s.name} (${ORD[slot]} level)`:s.name;
+  if(h==="attack"){ rollAttack({name:title,bonus:sgn(src.atk),dmg:d}); return; }
+  if(h==="weapon"){ const w=meleeWeapon(); rollAttack({name:title,bonus:w?w.bonus:sgn(src.atk),dmg:"weapon "+d}); return; }
+  const dm=rollDamage(d); if(!dm){ toast(`${s.name}: ${d}`); return; }
+  const lines=[{label:"Damage",big:String(dm.total),sub:dm.txt}];
+  if(h==="save") lines.unshift({label:"Save",big:`DC ${src.dc}`,sub:`${s.save||"Dex"} save`});
+  showRoll(title,lines,d);
+}
+function spellDmgModal(i){
+  const s=S.spells[i];
+  modal(`<h2>${esc(s.name)} damage</h2>
+    <label class="small muted">Damage at ${s.lvl?ORD[s.lvl]+" level":"your current level"}<input class="in" id="sdDmg" value="${esc(s.dmg||"")}" placeholder="e.g. 8d6 fire, or 1d10+5 force ×2 beams" style="margin:2px 0 8px;color:var(--ink)"></label>
+    ${s.lvl?`<label class="small muted">Extra for each slot level above ${ORD[s.lvl]}<input class="in" id="sdUp" value="${esc(s.up||"")}" placeholder="e.g. 1d6 (leave empty if none)" style="margin:2px 0 8px;color:var(--ink)"></label>`:`<p class="muted small">Cantrips: write the damage for your current level (it grows at levels 5, 11 and 17).</p>`}
+    <label class="small muted">How it hits<select class="in" id="sdHit" style="margin:2px 0 8px">${HIT_TYPES.map(([v,l])=>`<option value="${v}" ${(s.hit||"auto")===v?"selected":""}>${l}</option>`).join("")}</select></label>
+    <label class="small muted">Save (if it uses one)<select class="in" id="sdSave" style="margin:2px 0 8px">${["Str","Dex","Con","Int","Wis","Cha"].map(a=>`<option ${(s.save||"Dex")===a?"selected":""}>${a}</option>`).join("")}</select></label>
+    <button class="btn pri" data-a="spDmgSave" data-i="${i}" style="text-align:center">Save</button>
+    ${s.dmg?`<button class="btn" data-a="spDmgClear" data-i="${i}" style="text-align:center">No damage</button>`:""}`);
+}
 function checkMod(kind,k){
   if(kind==="abil") return mod(S.abil[k]);
   if(kind==="save") return mod(S.abil[k])+(S.saves[k]?S.prof:0);
@@ -581,14 +611,17 @@ function spend(kind){
   if(c[kind]&&!spentTwice.includes(SLOT_NAME[kind])){ spentTwice.push(SLOT_NAME[kind]); spendWarn=`Already used your ${spentTwice.join(" and ")} this turn! `; }
   c[kind]=true;
 }
-/* Cantrip during combat. With Extra Attack (not kineticist), each 1-action cantrip can take the place of a remaining attack (table ruling: both swings can be cantrips). */
-function castCantrip(i,line){
+/* Cantrip during combat. With Extra Attack (Bladesinger), ONE 1-action cantrip per Attack action can take the place of an attack. */
+function castCantrip(i){
   const s=S.spells[i], c=S.combat, ct=castTime(s.name);
-  const info=line?`: ${line.bonus} to hit, ${line.dmg}`:"";
-  if(ct==="action"&&c.atk>0&&c.atkKind==="weapon"&&!S.kin){ c.atk--; save(); render(); if(line) rollAttack(line); toast(`${s.name} as an attack${info}.${c.atk?` ${c.atk} more attack or cantrip this turn.`:""}`,4500); return; }
+  if(ct==="action"&&c.atk>0&&c.atkKind==="weapon"&&!c.cantripSwap&&!S.kin){
+    c.atk--; c.cantripSwap=true; save(); render(); rollSpell(s,0);
+    toast(`${s.name} in place of an attack.${c.atk?` ${c.atk} more weapon attack${c.atk>1?"s":""} this turn.`:""}`,4500); return; }
+  const actionWasFree=!c.action;
   spend(ct);
-  if(ct==="action"&&!S.kin&&S.features.some(f=>/^extra attack/i.test(f.name))){ c.atk=attacksPer()-1; c.atkKind="weapon"; }
-  save(); render(); if(line) rollAttack(line); toast(`${s.name}${info}.${c.atk?` You still have ${c.atk} more attack or cantrip (Extra Attack).`:""}`,4500);
+  if(ct==="action"&&actionWasFree&&!S.kin&&S.features.some(f=>/^extra attack/i.test(f.name))){ c.atk=attacksPer()-1; c.atkKind="weapon"; c.cantripSwap=true; }
+  save(); render(); rollSpell(s,0);
+  toast(`Cast ${s.name}.${c.atk?` You can still make ${c.atk} weapon attack${c.atk>1?"s":""} (Extra Attack). Only one cantrip per Attack action.`:""}`,4500);
 }
 /* Kineticist: aura + stance in one tap during combat */
 function kinBar(){
@@ -608,7 +641,7 @@ function startCombat(){
   save(); render();
   showRoll("Initiative",[{label:"Initiative",big:String(r.n+im),sub:`d20 ${r.txt} ${sgn(im)}`,cls:r.n===20?"crit":r.n===1?"miss":""}],"Tell your GM, then tap Next turn at the start of each of your turns.");
 }
-function nextTurn(){ const c=S.combat; c.round++; c.action=c.bonus=c.reaction=false; c.atk=0; c.gather=false; c.move=speedNow(); save(); render(); toast(`Round ${c.round}: action, bonus action, reaction and movement are back.`); }
+function nextTurn(){ const c=S.combat; c.round++; c.action=c.bonus=c.reaction=false; c.atk=0; c.gather=false; c.cantripSwap=false; c.move=speedNow(); save(); render(); toast(`Round ${c.round}: action, bonus action, reaction and movement are back.`); }
 function renderTurn(){
   if(!inCombat()) return `<section class="card turn" style="grid-column:1/-1"><div class="row"><h2 style="margin:0;flex:1">Turn tracker</h2><button class="btn pri" data-a="combatStart">Start combat</button></div>
     <p class="muted small" style="margin:6px 0 0">Tracks your action, bonus action, reaction and movement each round, and marks them when you attack, cast or use an impulse. Attack buttons roll the dice for you.</p>
@@ -621,12 +654,10 @@ function renderTurn(){
   const opt=(a,label,attrs="",cls="")=>`<button class="btn sm ${cls}" data-a="${a}" ${attrs}>${label}</button>`;
   const stdBtns=slots=>stdOf(slots).map(x=>opt("tStd",x.n,`data-i="${x.j}"`,"ghost")).join("");
   // Action options
-  const atkNames=new Set(S.attacks.map(a=>String(a.name||"").toLowerCase()));
-  const isCantripLine=a=>S.spells.some(s=>s.lvl===0&&s.name.toLowerCase()===String(a.name||"").toLowerCase());
-  const atk=S.attacks.map((a,i)=>opt("tAttack",`${esc(a.name)} <span class="muted">${esc(a.bonus)}${isCantripLine(a)?" · cantrip":attacksPer(a)>1?` · ×${attacksPer(a)}`:""}</span>`,`data-i="${i}"`)).join("");
+  const atk=S.attacks.map((a,i)=>opt("tAttack",`${esc(a.name)} <span class="muted">${esc(a.bonus)}${attacksPer(a)>1?` · ×${attacksPer(a)}`:""}</span>`,`data-i="${i}"`)).join("");
   const imps=S.kin?S.kin.impulses.map((x,i)=>({x,i,t:impTime(x)})):[];
   const ready=S.spells.map((s,i)=>({...s,i})).filter(s=>isReady(s));
-  const spellBtns=kind=>ready.filter(s=>castTime(s.name)===kind&&!(s.lvl===0&&atkNames.has(s.name.toLowerCase()))).map(s=>opt("tCast",`${esc(s.name)}${s.lvl?` <span class="muted">${ORD[s.lvl]}</span>`:""}`,`data-i="${s.i}"`)).join("");
+  const spellBtns=(kind,lv)=>ready.filter(s=>castTime(s.name)===kind&&(lv===undefined||(lv===0)===(s.lvl===0))).map(s=>opt("tCast",`${esc(s.name)}${s.lvl?` <span class="muted">${ORD[s.lvl]}</span>`:""}${s.dmg?` <span class="muted">· ${esc(s.dmg)}</span>`:""}`,`data-i="${s.i}"`)).join("");
   const impBtns=kind=>imps.filter(o=>o.t[0]===kind).map(o=>opt("impUse",`${esc(o.x.name)}${o.t.length>1?` <span class="muted">+ bonus</span>`:""}`,`data-i="${o.i}"`,o.x.type==="Basic"?"":"imp-ov")).join("");
   const curse=S.features.map((f,i)=>({f,i})).find(o=>/hexblade.s curse/i.test(o.f.name));
   const bonusOpts=[
@@ -646,12 +677,13 @@ function renderTurn(){
       <div class="slot move"><b>${c.move} ft</b><span>Movement left of ${speedNow()}</span>
         <div class="row" style="justify-content:center;gap:4px;margin-top:4px">${[5,10,15,30].map(n=>`<button class="btn sm" data-a="tMove" data-k="${n}" aria-label="Move ${n} feet">−${n}</button>`).join("")}<button class="btn sm ghost" data-a="tMove" data-k="reset">Reset</button></div></div>
     </div>
-    ${c.atk>0?`<p class="atkleft">Attack action: <strong>${c.atk} more attack${c.atk>1?"s":""}</strong> this turn${S.kin?"":" (attacks or cantrips)"}.</p>`:""}
+    ${c.atk>0?`<p class="atkleft">Attack action: <strong>${c.atk} more attack${c.atk>1?"s":""}</strong> this turn${S.kin?"":c.cantripSwap?"":" (one can be a cantrip)"}.</p>`:""}
     <div class="opts">
       <div><h3>Action</h3>
         ${atk?`<div class="muted small">Attack (×N = attacks per Attack action)</div><div class="obtns">${atk}</div>`:""}
         ${imps.some(o=>o.t[0]==="action")?`<div class="muted small">Impulses</div><div class="obtns">${impBtns("action")}</div>`:""}
-        ${ready.some(s=>castTime(s.name)==="action")?`<div class="muted small">Spells</div><div class="obtns">${spellBtns("action")}</div>`:""}
+        ${ready.some(s=>s.lvl===0&&castTime(s.name)==="action")?`<div class="muted small">Cantrips${S.features.some(f=>/^extra attack/i.test(f.name))?" (one can replace an attack)":""}</div><div class="obtns">${spellBtns("action",0)}</div>`:""}
+        ${ready.some(s=>s.lvl>0&&castTime(s.name)==="action")?`<div class="muted small">Spells</div><div class="obtns">${spellBtns("action",1)}</div>`:""}
         <div class="muted small">Common actions</div><div class="obtns">${stdBtns(["action","attack"])}</div>
       </div>
       <div><h3>Bonus action</h3><div class="obtns">${bonusOpts||`<span class="muted small">Nothing on your sheet uses a bonus action.</span>`}</div></div>
@@ -774,14 +806,15 @@ ${S.pact.max>0?`      <div class="slotrow"><span class="lv" style="color:var(--v
     </div>
     ${Object.keys(byLvl).sort((a,b)=>a-b).map(l=>`<div class="lvlhd">${l==0?"Cantrips":ORD[l]+" level"}</div>
       ${byLvl[l].map(s=>`<div class="sp src-${s.src} ${isReady(s)?"":"unprep"}" style="padding-left:10px">
-        <div class="nm"><input class="in bare" data-b="spells.${s.i}.name" value="${esc(s.name)}"></div>
+        <div class="nm"><input class="in bare" data-b="spells.${s.i}.name" value="${esc(s.name)}">${s.dmg?`<div class="small muted" style="padding-left:8px">${esc(spellLabel(s))}</div>`:""}</div>
+        <button class="tag ${s.dmg?"on":""}" data-a="spDmg" data-i="${s.i}" title="Damage dice">Dice</button>
         ${S.sources[s.src]?.prepares&&s.lvl>0?`<button class="tag prep ${s.prep?"on":""}" data-a="prep" data-i="${s.i}" aria-pressed="${s.prep}">${s.prep?"Prepared":"Prepare"}</button>`:""}
         <button class="tag ${s.r?"on":""}" data-a="spTag" data-k="r" data-i="${s.i}" title="Ritual">R</button>
         <button class="tag ${s.c?"on":""}" data-a="spTag" data-k="c" data-i="${s.i}" title="Concentration">C</button>
-        ${s.lvl===0?`<span style="width:58px"></span>`:isReady(s)?`<button class="btn sm pri" data-a="cast" data-i="${s.i}">Cast</button>`:s.r&&hasSpellbook(s)?`<button class="btn sm" data-a="cast" data-i="${s.i}">Ritual</button>`:`<span style="width:58px"></span>`}
+        ${s.lvl===0?(s.dmg?`<button class="btn sm pri" data-a="castCantripBtn" data-i="${s.i}">Cast</button>`:`<span style="width:58px"></span>`):isReady(s)?`<button class="btn sm pri" data-a="cast" data-i="${s.i}">Cast</button>`:s.r&&hasSpellbook(s)?`<button class="btn sm" data-a="cast" data-i="${s.i}">Ritual</button>`:`<span style="width:58px"></span>`}
         <button class="x" data-a="del" data-k="spells" data-i="${s.i}" aria-label="Remove">×</button>
       </div>`).join("")}`).join("")}
-    <p class="muted small" style="margin-top:12px">Spells from classes that don’t prepare are always ready. Unprepared wizard rituals can still be cast as rituals. R marks a ritual, C marks concentration. Casting a C spell sets your concentration. Pact slots can power any spell you know.</p>
+    <p class="muted small" style="margin-top:12px">Spells from classes that don’t prepare are always ready. Unprepared wizard rituals can still be cast as rituals. R marks a ritual, C marks concentration. Dice sets a spell’s damage so casting it rolls automatically. Casting a C spell sets your concentration. Pact slots can power any spell you know.</p>
   </section>`;
 }
 
@@ -1071,6 +1104,10 @@ document.addEventListener("click",e=>{
       toast(`Bladesong (1 minute): AC +${bsBonus()}, speed +10 ft, advantage on Acrobatics, +${bsBonus()} on concentration saves. Ends with medium or heavy armor, a shield, or a two-handed attack.`,6000); return; }
     case "combatStart": startCombat(); return;
     case "rollMode": S.rollMode=k; save(); render(); return;
+    case "spDmg": spellDmgModal(i); return;
+    case "spDmgSave": { const sp=S.spells[i]; sp.dmg=document.getElementById("sdDmg").value.trim(); const up=document.getElementById("sdUp"); sp.up=up?up.value.trim():""; sp.hit=document.getElementById("sdHit").value; sp.save=document.getElementById("sdSave").value; if(!sp.dmg){ delete sp.dmg; delete sp.up; } closeModal(); save(); render(); toast("Damage saved."); return; }
+    case "spDmgClear": { const sp=S.spells[i]; delete sp.dmg; delete sp.up; closeModal(); save(); render(); return; }
+    case "castCantripBtn": if(inCombat()) castCantrip(i); else rollSpell(S.spells[i],0); return;
     case "rollClose": document.getElementById("rollbox").hidden=true; return;
     case "rollCheck": { const [kind,key]=k.split(":"); rollCheck(kind,key); return; }
     case "deathRoll": { const r=roll(20); let res;
@@ -1088,14 +1125,12 @@ document.addEventListener("click",e=>{
     case "tMove": { const c=S.combat; c.move=k==="reset"?speedNow():Math.max(0,c.move-Number(k)); save(); render(); return; }
     case "tAttack": { const a=S.attacks[i];
       // An attack line that is really a cantrip on the sheet (Eldritch Blast, Booming Blade...) follows cantrip rules
-      const cj=S.spells.findIndex(s=>s.lvl===0&&s.name.toLowerCase()===String(a.name||"").toLowerCase());
-      if(cj>=0&&inCombat()){ castCantrip(cj,a); return; }
       if(!inCombat()){ rollAttack(a); return; }
       const c=S.combat, kind=attackKind(a);
-      if(c.atk>0&&c.atkKind===kind) c.atk--; else { spend("action"); c.atk=attacksPer(a)-1; c.atkKind=kind; }
+      if(c.atk>0&&c.atkKind===kind) c.atk--; else { spend("action"); c.atk=attacksPer(a)-1; c.atkKind=kind; c.cantripSwap=false; }
       save(); render(); rollAttack(a); if(c.atk||spendWarn) toast(c.atk?`${c.atk} more attack${c.atk>1?"s":""} this turn.`:"",3500); return; }
     case "tCast": { const s=S.spells[i];
-      if(s.lvl===0){ castCantrip(i,S.attacks.find(a=>String(a.name).toLowerCase()===s.name.toLowerCase())); return; }
+      if(s.lvl===0){ castCantrip(i); return; }
       castModal(i); return; }
     case "tStd": { const [slot,n,d]=STD_ACTIONS[i];
       if(!inCombat()){ toast(`${n}: ${d}`,5000); return; }
@@ -1166,6 +1201,7 @@ document.addEventListener("click",e=>{
     case "castAt": { const s=S.spells[i];
       if(k==="pact") S.pact.used++; else if(k!=="ritual") S.slots[k].used++;
       if(k!=="ritual") spend(castTime(s.name));
+      rollSpell(s,k==="pact"?S.pact.level:k==="ritual"?s.lvl:Number(k));
       if(s.c) S.conc=s.name;
       closeModal(); save(); render(); toast(`Cast ${s.name}${k==="ritual"?" as a ritual":k==="pact"?" with a pact slot":" at "+ORD[k]+" level"}.`); return; }
     case "addSpell": if(!Object.keys(S.sources).length){ S.sources.main={label:"Spellcasting",abil:"int",prepares:false,level:1}; save(); } modal(`<h2>Add spell</h2>
