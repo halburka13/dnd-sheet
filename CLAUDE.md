@@ -31,6 +31,9 @@ Sync backend: Supabase project **`jxhmfqjrlcwkvunzyuwl`** (Postgres + Auth, emai
 - `kin` (kineticist only): `{abil, blastAbil, ilvl, aura, stance, gather, blast:{dice,count,range}, auraNote, impulses:[{name, el, lvl, type: Stance|Basic|Surge|Complex, act, range, dmg, text, c}]}`. Shows the Impulses tab and the Aura button. Surge/Complex = overflow (aura off; locked for the rest of the round in combat).
 - Spells may carry damage: `dmg` (at the spell’s own level, e.g. `8d6 fire`, `1d10+5 force ×2 beams`, `+1d8 thunder`), `up` (per slot level above), `hit` (`attack` | `save` | `weapon` | `auto`), `save`, `note`. Spells named “…Smite” become a pending rider (`S.riders`) added to the next melee weapon hit instead of rolling on cast.
 - A feature named `Bladesong` enables the Bladesong toggle (`S.bladesong`: AC + Int, speed +10).
+- **Derived on every render (`derive()`):** proficiency from total level unless `S.autoProf === false`; attacks with `ab` (ability key) get `bonus`/`dmg` from `dice` + that modifier + `magic`; cantrips with `base` + `grow` (`dice` | `dice-1` | `beams`) + `addMod` get `dmg` by character level; `extraBase`/`extraGrow`/`extraMod`/`extraLabel` give a second roll button on a hit (Booming Blade move damage, Green-Flame Blade second target); `S.kin.ilvl`, `blast.count` and `gather` follow the class table unless `S.kin.autoTable === false`.
+- `S.marks = {hex, curse}`: the current target is Hexed (+1d6 necrotic per hit) / Cursed (+prof damage, crit on 19–20). `S.effects = [{name, rounds}]` count down on Next turn.
+- Town: `projects[].income` is added per turn when the project is Done; `initiative = [{name, init}]` (players are added when they start combat); `events = [{text}]` for the random event roll.
 - `S.combat` = current turn tracker state `{on, round, action, bonus, reaction, move, atk, atkKind, cantripSwap, gather, auraLock, init}`. Past combats are **not** kept (`combats` is set to `null`). `S.rollMode` = `normal|adv|dis`.
 - Attack lines (`attacks`) are weapons/blasts only; cantrips are cast from the Spells list. Attack rolls are two-phase: roll to hit, then the player taps Hit or Miss before damage is rolled.
 - **Sync caveat:** `merge3` treats a key missing on one side as “keep the other side”, so **deleting a key never syncs**. To clear a field, set it to `null` (or an empty array). Arrays are merged as whole values.
@@ -61,7 +64,7 @@ Sync backend: Supabase project **`jxhmfqjrlcwkvunzyuwl`** (Postgres + Auth, emai
 - Use the Supabase MCP for schema changes (`apply_migration`), then run security advisors. Never put the service-role key in client code. The publishable key in `config.js` is meant to be public.
 
 ## Workflow
-- **Test:** there is no automated test suite in the repo yet. Serve the folder locally (`python -m http.server 8765` in the repo) and check both `/` and `/town/` in a browser, with a test character loaded through Sync → Load backup. Unregister the service worker between test runs, or you get the cached old page.
+- **Test:** serve the folder locally (`python -m http.server 8765` in the repo) and open `/tests/` (also live at https://halburka13.github.io/dnd-sheet/tests/). It loads the app with `?test=1` (separate `dndtest` storage, no sync, no service worker) and runs the rule checks; all must pass. Add a check when you add a rule. Then look at `/` and `/town/` by hand. Unregister the service worker between runs on localhost, or you get the cached old page.
 - **Deploy:** commit and push to `main`. GitHub Pages publishes in about 1 minute.
 - **When to bump caches:** bump `CACHE` in `sw.js` (and `town/sw.js`) whenever the service worker logic changes or you need devices to drop stale files.
 - **After a deploy, tell the user:** open the app twice on each device.

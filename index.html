@@ -192,6 +192,9 @@ h3+.feat{border-top:0}
 .rb-line.crit b{color:var(--gold)} .rb-line.miss b{color:var(--blood)}
 .rb-ask{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line)} .rb-ask span{flex:1;font-weight:700}
 .rb-ask .btn{min-width:84px;text-align:center}
+.effects{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px}
+.effect{display:inline-flex;align-items:center;gap:6px;padding:4px 4px 4px 10px;border-radius:999px;background:var(--panel2);font-size:14px}
+.rb-types{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0}
 .riders{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
 .rider{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;border-radius:10px;background:var(--bloodSoft);color:var(--blood);font-size:15px}
 .rb-note{font-size:14px;color:var(--gold);border-top:1px solid var(--line);padding-top:4px;margin-top:2px}
@@ -333,8 +336,9 @@ const DEFAULT={
 
 let S=null, T=null;
 const TOWN_ONLY=window.APP_MODE==="town";
-if(!TOWN_ONLY&&/\/town\/?(index\.html)?$/.test(location.pathname)&&!/[?&]v=/.test(location.search)){ location.replace(location.pathname.replace(/\/town\/?(index\.html)?$/,"/town/")+"?v="+Date.now()); }
-const NS=TOWN_ONLY?"dndtown":"dnd2";
+const TEST=/[?&]test=1\b/.test(location.search); // tests/index.html loads the app this way: separate storage, no sync
+if(!TEST&&!TOWN_ONLY&&/\/town\/?(index\.html)?$/.test(location.pathname)&&!/[?&]v=/.test(location.search)){ location.replace(location.pathname.replace(/\/town\/?(index\.html)?$/,"/town/")+"?v="+Date.now()); }
+const NS=TEST?"dndtest":TOWN_ONLY?"dndtown":"dnd2";
 let tab=TOWN_ONLY?"town":"combat";
 let spellFilter="all";
 
@@ -475,9 +479,10 @@ function rollAttack(a){
   const beams=Number((String(a.dmg).match(/[×x]\s*(\d+)\s*beams?/i)||[])[1])||1;
   let dmgStr=String(a.dmg||"").replace(/[×x]\s*\d+\s*beams?/i,""), foot=a.dmg, melee=isMeleeAttack(a);
   if(/weapon/i.test(dmgStr)){ const w=meleeWeapon(); melee=true; if(w){ dmgStr=w.dmg+" "+dmgStr.replace(/weapon/i,""); foot=`${w.name} ${w.dmg} plus ${dmgStr.replace(w.dmg,"").trim()}`; } }
-  const rows=[];
-  for(let b=0;b<beams;b++){ const r=d20(); rows.push({label:beams>1?`Beam ${b+1}`:"Attack",toHit:r.n+bonus,sub:`d20 ${r.txt} ${sgn(bonus)}`,crit:r.n===20,nat1:r.n===1,state:"?",dmg:null}); }
-  curAtk={title:a.name,foot,dmgStr,melee,blast:isBlast(a),rows};
+  const rows=[], cm=critMin();
+  const types=(dmgStr.match(/([a-z]+(?:\/[a-z]+)+)/i)||[])[1];
+  for(let b=0;b<beams;b++){ const r=d20(); rows.push({label:beams>1?`Beam ${b+1}`:"Attack",toHit:r.n+bonus,sub:`d20 ${r.txt} ${sgn(bonus)}${cm<20&&r.n===19?" (19 crits: Hexblade’s Curse)":""}`,crit:r.n>=cm,nat1:r.n===1,state:"?",dmg:null,types:types?types.split("/"):null,type:types?types.split("/")[0]:null}); }
+  curAtk={title:a.name,foot,dmgStr,melee,blast:isBlast(a),rows,extra:a.extra||null,extraDone:null};
   rows.forEach((row,b)=>{ if(row.crit) atkResolve(b,true,true); else if(row.nat1) row.state="miss"; });
   rollLog.unshift({title:a.name,lines:[],foot,t:Date.now()}); rollLog=rollLog.slice(0,8);
   paintAttack();
@@ -489,6 +494,9 @@ function atkResolve(b,hit,quiet){
     const dm=rollDamage(c.dmgStr,row.crit)||{total:0,txt:""}; let total=dm.total; const parts=[dm.txt].filter(Boolean), notes=[];
     if(c.blast&&gatherPending()){ const g=rollDamage(S.kin.gather,row.crit); if(g){ total+=g.total; parts.push(`Gather Power ${g.txt}`); } S.combat.gather=false; }
     if(c.melee&&(S.riders||[]).length){ S.riders.forEach(rd=>{ const g=rollDamage(rd.dmg,row.crit); if(g){ total+=g.total; parts.push(`${rd.name} ${g.txt}`); } if(rd.note) notes.push(`${rd.name}: ${rd.note}`); }); S.riders=[]; }
+    const mk=S.marks||{};
+    if(mk.hex&&hasHex()){ const g=rollDamage("1d6 necrotic",row.crit); total+=g.total; parts.push(`Hex ${g.txt}`); }
+    if(mk.curse&&curseFeature()){ total+=S.prof; parts.push(`Hexblade’s Curse +${S.prof}`); }
     row.dmg={total,sub:parts.join(" + ")}; row.notes=notes;
   }
   if(!quiet){ save(); paintAttack(); renderTrackerRiders(); }
@@ -500,8 +508,12 @@ function paintAttack(){
   box.innerHTML=`<div class="rb-hd"><strong>${esc(c.title)}</strong><button class="x" data-a="rollClose" aria-label="Close roll">×</button></div>
     ${c.rows.map((r,b)=>`<div class="rb-line ${r.crit?"crit":r.nat1||r.state==="miss"?"miss":""}"><span class="rb-lbl">${esc(r.label)} to hit</span><b>${r.toHit}</b><span class="rb-sub">${esc(r.sub)}${r.crit?" · CRITICAL":r.nat1?" · natural 1":""}</span></div>
       ${r.state==="?"?`<div class="rb-ask"><span>Did it hit?</span><button class="btn pri" data-a="atkHit" data-i="${b}">Hit</button><button class="btn" data-a="atkMiss" data-i="${b}">Miss</button></div>`
-        :r.state==="hit"?`<div class="rb-line ${r.crit?"crit":""}"><span class="rb-lbl">${esc(r.label)} damage</span><b>${r.dmg.total}</b><span class="rb-sub">${esc(r.dmg.sub)}</span></div>${(r.notes||[]).map(n=>`<div class="rb-note">${esc(n)}</div>`).join("")}`
+        :r.state==="hit"?`<div class="rb-line ${r.crit?"crit":""}"><span class="rb-lbl">${esc(r.label)} damage</span><b>${r.dmg.total}</b><span class="rb-sub">${esc(r.dmg.sub)}${r.type?` · ${esc(r.type)}`:""}</span></div>
+          ${r.types?`<div class="rb-types">${r.types.map(t=>`<button class="chip ${r.type===t?"on":""}" data-a="atkType" data-i="${b}" data-k="${esc(t)}">${esc(t)}</button>`).join("")}</div>`:""}
+          ${r.type==="slashing"&&S.features.some(f=>/^slasher/i.test(f.name))?`<div class="rb-note">Slasher: target’s speed −10 ft until the start of your next turn${r.crit?", and it has disadvantage on attack rolls until then":""} (once per turn).</div>`:""}
+          ${(r.notes||[]).map(n=>`<div class="rb-note">${esc(n)}</div>`).join("")}`
         :`<div class="rb-note" style="color:var(--muted)">Miss: no damage.</div>`}`).join("")}
+    ${c.extra&&c.extra.dmg&&c.rows.some(r=>r.state==="hit")?(c.extraDone?`<div class="rb-line"><span class="rb-lbl">${esc(c.extra.label)}</span><b>${c.extraDone.total}</b><span class="rb-sub">${esc(c.extraDone.txt)}</span></div>`:`<div class="rb-ask"><span>${esc(c.extra.label)}?</span><button class="btn" data-a="atkExtra">Roll ${esc(c.extra.dmg)}</button></div>`):""}
     ${c.melee&&riders.length&&c.rows.some(r=>r.state==="?")?`<div class="rb-note">On a hit, also adds: ${esc(riders.map(r=>`${r.name} ${r.dmg}`).join(", "))}</div>`:""}
     ${c.foot?`<div class="rb-foot">${esc(c.foot)}</div>`:""}`;
   box.hidden=false; rollShownAt=Date.now();
@@ -530,6 +542,93 @@ function rollImpulse(x){
   if(sv) lines.unshift({label:"Save",big:`DC ${kinStats().dc}`,sub:`${sv} save${/half/i.test(x.dmg)?", half on a success":""}`});
   showRoll(x.name,lines,x.dmg+extra);
 }
+/* ---------- derived numbers (recomputed on every render) ----------
+   S.autoProf !== false: proficiency from total level.
+   attack.ab (str|dex|...): to-hit = mod + prof + magic; damage = attack.dice with the mod added.
+   spell.base + spell.grow ("dice" | "dice-1" | "beams") + spell.addMod: cantrip damage by character level.
+   spell.extraBase/extraGrow/extraMod/extraLabel: an optional second roll button (Booming Blade move, Green-Flame second target).
+   S.kin: impulse level, blasts per action and Gather Power dice follow the class table. */
+function profFor(l){ return 2+Math.floor((Math.max(1,l)-1)/4) }
+function cantripTier(){ const l=totalLevel(); return 1+(l>=5)+(l>=11)+(l>=17) }
+function withMod(dice,m){ const t=String(dice||"").trim(); const x=t.match(/^(\+?\s*\d*d\d+)(.*)$/i); if(!x) return t; return `${x[1]}${m?(m>0?"+":"-")+Math.abs(m):""}${x[2]}`; }
+function growDice(base,n){ const t=String(base||"").trim(), plus=t.startsWith("+"); const x=t.replace(/^\+\s*/,"").match(/^(\d*)d(\d+)(.*)$/i); if(!x||n<=0) return ""; return `${plus?"+":""}${Number(x[1]||1)*n}d${x[2]}${x[3]}`; }
+function cantripDmg(base,grow,addMod){ const t=cantripTier(), m=addMod?mod(S.abil[addMod]||10):0;
+  if(grow==="beams") return `${withMod(base,m)} ×${t} beams`;
+  return withMod(growDice(base,grow==="dice-1"?t-1:t),m); }
+const KIN_FEATURES={2:"Gather Power",3:"Primordial Alignment (subclass)",4:"Ability score improvement",5:"Extra Blast, Gate Junction",6:"Subclass feature",7:"Kinetic Quickness",8:"Ability score improvement",9:"Internal Buffer",10:"Subclass feature (Weaver: Third Gate)",11:"Elemental Rebuttal, 3 blasts",12:"Ability score improvement",13:"Primordial Elements",14:"Subclass feature",15:"Kinetic Momentum",16:"Ability score improvement",17:"Final Gate, 4 blasts",18:"Eternal Aura",19:"Ability score improvement",20:"Kinetic Apex"};
+const KIN_KNOWN=[0,3,3,4,4,5,5,6,6,7,7,8,8,10,10,10,10,11,11,11,11];
+function kinTable(L){ return {ilvl:Math.min(9,Math.ceil(L/2)),count:L>=17?4:L>=11?3:L>=5?2:1,gather:L<2?"":L<5?"1d6":L<11?"2d6":L<17?"3d6":L<20?"4d8":"4d10",known:KIN_KNOWN[Math.min(20,L)]||3} }
+function derive(){
+  if(!S) return;
+  if(S.autoProf!==false) S.prof=profFor(totalLevel());
+  S.attacks.forEach(a=>{ if(!a.ab) return;
+    if(a.dice==null) a.dice=String(a.dmg||"").replace(/\s*[+−-]\s*\d+(?!\s*d)/,"");
+    const m=mod(S.abil[a.ab]||10)+Number(a.magic||0); a.bonus=sgn(m+S.prof).replace("−","-"); a.dmg=withMod(a.dice,m); });
+  S.spells.forEach(sp=>{
+    if(sp.base) sp.dmg=cantripDmg(sp.base,sp.grow,sp.addMod);
+    if(sp.extraBase) sp.extra=cantripDmg(sp.extraBase,sp.extraGrow,sp.extraMod);
+  });
+  if(S.kin&&S.kin.autoTable!==false){ const t=kinTable(totalLevel()); S.kin.ilvl=t.ilvl; S.kin.blast.count=t.count; S.kin.gather=t.gather||S.kin.gather; }
+}
+/* ---------- Hex and Hexblade's Curse on the current target ---------- */
+function hasHex(){ return S.spells.some(sp=>/^hex$/i.test(sp.name)) }
+function curseFeature(){ return S.features.find(f=>/hexblade.s curse/i.test(f.name)) }
+function marksHtml(){
+  if(!hasHex()&&!curseFeature()) return "";
+  const m=S.marks||{};
+  return `<div class="chips" style="margin-bottom:10px">${hasHex()?`<button class="chip ${m.hex?"on":""}" data-a="markToggle" data-k="hex" aria-pressed="${!!m.hex}">${m.hex?"Target Hexed: +1d6 necrotic per hit":"Target not Hexed"}</button>`:""}${curseFeature()?`<button class="chip ${m.curse?"on":""}" data-a="markToggle" data-k="curse" aria-pressed="${!!m.curse}">${m.curse?`Target Cursed: +${S.prof} damage, crit on 19–20`:"Target not Cursed"}</button>`:""}</div>`;
+}
+function critMin(){ return S.marks&&S.marks.curse&&curseFeature()?19:20 }
+/* ---------- timed effects that count down with Next turn ---------- */
+function effectsHtml(){
+  const ef=S.effects||[];
+  return `<div class="effects">${ef.map((x,i)=>`<span class="effect"><strong>${esc(x.name)}</strong> ${x.rounds} round${x.rounds===1?"":"s"} left <button class="x" data-a="effectDel" data-i="${i}" aria-label="Remove ${esc(x.name)}">×</button></span>`).join("")}<button class="btn sm ghost" data-a="effectAdd">Add timed effect</button></div>`;
+}
+function addEffect(name,rounds){ S.effects=(S.effects||[]).filter(x=>x.name!==name); S.effects.push({name,rounds}); }
+function endEffect(name){ if(/^bladesong$/i.test(name)&&S.bladesong){ S.bladesong=false; } if(S.conc&&S.conc===name) dropConcentration(); }
+function dropConcentration(){ const n=S.conc; if(!n) return; if(S.riders) S.riders=S.riders.filter(r=>r.name!==n); if(/^hex$/i.test(n)&&S.marks) S.marks.hex=false; if(S.effects) S.effects=S.effects.filter(x=>x.name!==n); S.conc=""; }
+/* Automatic concentration save when you take damage */
+function concentrationCheck(dmg){
+  const name=S.conc, dc=Math.max(10,Math.floor(dmg/2)), m=checkMod("save","con")+(S.bladesong?bsBonus():0), r=d20("normal");
+  const total=r.n+m, kept=r.n!==1&&total>=dc;
+  if(!kept) dropConcentration();
+  showRoll(`Concentration: ${name}`,[{label:`Con save DC ${dc}`,big:String(total),sub:`d20 ${r.txt} ${sgn(m)}${S.bladesong?" (includes Bladesong)":""}`,cls:kept?"":"miss"},{label:kept?"Kept":"Lost",big:kept?"✓":"✗",sub:kept?`${name} continues.`:`${name} ended.`,cls:kept?"crit":"miss"}],kept?"":"Wrong? Type the spell back into Concentration on the Combat tab.");
+}
+/* ---------- level up ---------- */
+function levelUpModal(){
+  const cm=mod(S.abil.con);
+  modal(`<h2>Level up</h2><p class="muted small">You’re level ${totalLevel()}. Pick which class gets the new level.</p>
+    ${S.hd.map((h,i)=>`<label class="row" style="margin-bottom:6px"><input type="radio" name="luCls" value="${i}" ${i===0?"checked":""}> d${h.die} class (now ${h.total} level${h.total>1?"s":""})</label>`).join("")}
+    <label class="row" style="margin-bottom:10px"><input type="radio" name="luCls" value="new"> A new class with a d<select class="in" id="luDie" style="width:auto">${[6,8,10,12].map(d=>`<option>${d}</option>`).join("")}</select></label>
+    <label class="small muted">Class &amp; level text<input class="in" id="luText" value="${esc(S.classes)}" style="margin:2px 0 8px;color:var(--ink)"></label>
+    <p class="small muted">Hit points: die + Con (${sgn(cm)})${S.features.some(f=>/^tough$/i.test(f.name))?" + 2 (Tough)":""}.</p>
+    <button class="btn pri" data-a="luDo" data-k="roll" style="text-align:center">Roll hit points</button>
+    <button class="btn" data-a="luDo" data-k="avg" style="text-align:center">Take the average</button>`);
+}
+function levelUp(how){
+  const sel=document.querySelector('input[name="luCls"]:checked'), text=document.getElementById("luText").value.trim();
+  const before={prof:S.prof,tier:cantripTier()};
+  let h; if(sel.value==="new"){ h={die:Number(document.getElementById("luDie").value),total:0,used:0}; S.hd.push(h); } else h=S.hd[Number(sel.value)];
+  h.total++;
+  const r=how==="roll"?roll(h.die):Math.floor(h.die/2)+1;
+  const gain=Math.max(1,r+mod(S.abil.con)+(S.features.some(f=>/^tough$/i.test(f.name))?2:0));
+  S.hp.max+=gain; S.hp.cur+=gain; if(text) S.classes=text;
+  derive();
+  const L=totalLevel(), notes=[`Max HP +${gain} (${how==="roll"?`rolled ${r}`:`average ${r}`} on the d${h.die}). Now ${S.hp.max}.`];
+  if(S.prof!==before.prof) notes.push(`Proficiency bonus is now +${S.prof}.`);
+  if(cantripTier()!==before.tier) notes.push("Cantrip damage went up (updated automatically for cantrips with dice).");
+  if(S.kin){ const t=kinTable(L); notes.push(`Kineticist ${L}: impulse level ${ORD[t.ilvl]}, ${t.count} blast${t.count>1?"s":""} per action, Gather Power ${t.gather}. You know ${t.known} impulses${t.known>KIN_KNOWN[L-1]?` (+${t.known-KIN_KNOWN[L-1]} new)`:""}.`); if(KIN_FEATURES[L]) notes.push(`New: ${KIN_FEATURES[L]}.`); }
+  if([4,8,12,16,19].includes(h.total)) notes.push(`This class is now level ${h.total}: most classes get an ability score improvement or a feat here.`);
+  if(S.spells.length) notes.push("Check your spell slots and new spells on the Spells tab.");
+  closeModal(); save(); render();
+  showRoll(`Level ${L}!`,notes.map((n,i)=>({label:i?"":"Done",big:i?"":"↑",sub:n})));
+}
+/* ---------- shared initiative (stored in the town, so the GM sees it) ---------- */
+function syncInit(){
+  if(!T||!S||!S.combat||S.combat.init==null) return;
+  T.initiative=(T.initiative||[]).filter(x=>x.name!==S.name);
+  T.initiative.push({name:S.name||"Character",init:Number(S.combat.init)});
+}
 /* ---------- spell damage ----------
    spell.dmg = damage at its own level ("8d6 fire", "1d10+5 force ×2 beams", "+1d8 thunder")
    spell.up  = extra per slot level above ("1d6", or a number like "5")
@@ -543,8 +642,9 @@ function rollSpell(s,slot){
   if(!s||!s.dmg) return;
   const src=S.sources[s.src]?casterStats(s.src):{dc:8+S.prof,atk:S.prof};
   const d=spellDmgAt(s,slot), h=s.hit||"auto", title=slot&&slot>s.lvl?`${s.name} (${ORD[slot]} level)`:s.name;
-  if(h==="attack"){ rollAttack({name:title,bonus:sgn(src.atk),dmg:d}); return; }
-  if(h==="weapon"){ const w=meleeWeapon(); rollAttack({name:title,bonus:w?w.bonus:sgn(src.atk),dmg:"weapon "+d}); return; }
+  if(h==="attack"){ rollAttack({name:title,bonus:sgn(src.atk),dmg:d,extra:s.extra?{label:s.extraLabel||"Extra damage",dmg:s.extra}:null}); return; }
+  const extra=s.extra?{label:s.extraLabel||"Extra damage",dmg:s.extra}:null;
+  if(h==="weapon"){ const w=meleeWeapon(); rollAttack({name:title,bonus:w?w.bonus:sgn(src.atk),dmg:"weapon "+d,extra}); return; }
   const dm=rollDamage(d); if(!dm){ toast(`${s.name}: ${d}`); return; }
   const lines=[{label:"Damage",big:String(dm.total),sub:dm.txt}];
   if(h==="save") lines.unshift({label:"Save",big:`DC ${src.dc}`,sub:`${s.save||"Dex"} save`});
@@ -699,11 +799,14 @@ function rollModeChips(){ const m=rollMode(); return `<div class="chips" style="
 function startCombat(){
   S.combat={on:true,round:1,action:false,bonus:false,reaction:false,move:speedNow(),atk:0};
   const im=mod(S.abil.dex)+Number(S.initMisc||0), r=d20(); S.combat.init=r.n+im;
-  if(S.combats) S.combats=null; // older versions kept a history of past combats; cleared (null syncs, a deleted key would come back)
+  if(S.combats) S.combats=null;
+  syncInit(); // older versions kept a history of past combats; cleared (null syncs, a deleted key would come back)
   save(); render();
   showRoll("Initiative",[{label:"Initiative",big:String(r.n+im),sub:`d20 ${r.txt} ${sgn(im)}`,cls:r.n===20?"crit":r.n===1?"miss":""}],"Tell your GM, then tap Next turn at the start of each of your turns.");
 }
-function nextTurn(){ const c=S.combat; c.round++; c.action=c.bonus=c.reaction=false; c.atk=0; c.gather=false; c.cantripSwap=false; c.move=speedNow(); save(); render(); toast(`Round ${c.round}: action, bonus action, reaction and movement are back.`); }
+function nextTurn(){ const c=S.combat; c.round++;
+  const ended=[]; S.effects=(S.effects||[]).map(x=>({...x,rounds:x.rounds-1})).filter(x=>{ if(x.rounds<=0){ ended.push(x.name); endEffect(x.name); return false; } return true; });
+  if(ended.length) spendWarn+=`Ended: ${ended.join(", ")}. `; c.action=c.bonus=c.reaction=false; c.atk=0; c.gather=false; c.cantripSwap=false; c.move=speedNow(); save(); render(); toast(`Round ${c.round}: action, bonus action, reaction and movement are back.`); }
 function renderTurn(){
   if(!inCombat()) return `<section class="card turn" style="grid-column:1/-1"><div class="row"><h2 style="margin:0;flex:1">Turn tracker</h2><button class="btn pri" data-a="combatStart">Start combat</button></div>
     <p class="muted small" style="margin:6px 0 0">Tracks your action, bonus action, reaction and movement each round, and marks them when you attack, cast or use an impulse. Attack buttons roll the dice for you.</p>
@@ -736,6 +839,8 @@ function renderTurn(){
     ${S.kin?kinBar():""}
     ${rollModeChips()}
     <div class="riders-slot">${ridersHtml()}</div>
+    ${marksHtml()}
+    ${effectsHtml()}
     <div class="slots">
       ${slot("action","Action")}${slot("bonus","Bonus action")}${slot("reaction","Reaction")}
       <div class="slot move"><b>${c.move} ft</b><span>Movement left of ${speedNow()}</span>
@@ -805,12 +910,14 @@ function renderCombat(){
   <section class="card">
     <h2>Attacks <button class="btn sm" data-a="add" data-k="attacks">Add</button></h2>
     <div class="riders-slot">${ridersHtml()}</div>
+    ${marksHtml()}
     ${S.attacks.map((a,i)=>`<div class="atk">
       <input class="in" data-b="attacks.${i}.name" value="${esc(a.name)}" aria-label="Attack name" style="font-weight:700">
-      <input class="in" data-b="attacks.${i}.bonus" value="${esc(a.bonus)}" aria-label="To hit" style="text-align:center">
-      <input class="in" data-b="attacks.${i}.dmg" value="${esc(a.dmg)}" aria-label="Damage">
+      ${a.ab?`<span class="in" style="text-align:center;display:flex;align-items:center;justify-content:center" title="Worked out from ${a.ab.toUpperCase()} + proficiency">${esc(a.bonus)}</span>`:`<input class="in" data-b="attacks.${i}.bonus" value="${esc(a.bonus)}" aria-label="To hit" style="text-align:center">`}
+      ${a.ab?`<input class="in" data-b="attacks.${i}.dice" value="${esc(a.dice||"")}" aria-label="Damage dice" title="Dice and type only; the ${a.ab.toUpperCase()} modifier is added for you (${esc(a.dmg)})">`:`<input class="in" data-b="attacks.${i}.dmg" value="${esc(a.dmg)}" aria-label="Damage">`}
       <button class="x" data-a="del" data-k="attacks" data-i="${i}" aria-label="Remove">×</button>
       <div class="note row" style="flex-wrap:nowrap"><button class="btn sm pri" data-a="tAttack" data-i="${i}">Attack</button>
+      <select class="in small" data-b="attacks.${i}.ab" style="width:auto" aria-label="Ability for this attack"><option value="" ${a.ab?"":"selected"}>Manual</option>${ABILS.map(([k])=>`<option value="${k}" ${a.ab===k?"selected":""}>Auto ${k.toUpperCase()}</option>`).join("")}</select>
       <input class="in bare small muted" data-b="attacks.${i}.note" value="${esc(a.note)}" placeholder="Notes" style="flex:1"></div>
     </div>`).join("")}
   </section>
@@ -983,7 +1090,9 @@ function renderCharacter(){
   const pp=10+mod(S.abil.wis)+(S.skills.perception?S.prof*S.skills.perception:0);
   return `<div class="grid">
   <section class="card" style="grid-column:1/-1">
-    <h2>Abilities <span class="row small muted" style="font-family:var(--body);font-weight:400">Proficiency <input class="in num" type="number" data-b="prof" value="${S.prof}" style="width:56px"></span></h2>
+    <h2>Abilities <span class="row small muted" style="font-family:var(--body);font-weight:400">Proficiency ${S.autoProf!==false?`<strong style="font-size:20px">+${S.prof}</strong> (level ${totalLevel()})`:`<input class="in num" type="number" data-b="prof" value="${S.prof}" style="width:56px">`}
+      <label><input type="checkbox" data-a="autoProf" ${S.autoProf!==false?"checked":""}> Auto</label>
+      <button class="btn sm pri" data-a="levelUp">Level up</button></span></h2>
     <div class="abils">${ABILS.map(([k,l])=>`<div class="ab"><div class="k">${l}</div><button class="m rollv" data-a="rollCheck" data-k="abil:${k}" aria-label="Roll ${l} check">${sgn(mod(S.abil[k]))}</button><input type="number" data-b="abil.${k}" value="${S.abil[k]}" aria-label="${l} score"></div>`).join("")}</div>
   </section>
   <section class="card">
@@ -1031,7 +1140,8 @@ function renderInventory(){
 }
 
 /* ---------- town ---------- */
-function townNet(){return T.income.reduce((a,x)=>a+Number(x.amt||0),0)-T.expenses.reduce((a,x)=>a+Number(x.amt||0),0)}
+function buildingIncome(){return (T.projects||[]).filter(p=>p.status==="Done").reduce((a,p)=>a+Number(p.income||0),0)}
+function townNet(){return T.income.reduce((a,x)=>a+Number(x.amt||0),0)+buildingIncome()-T.expenses.reduce((a,x)=>a+Number(x.amt||0),0)}
 function moneyRows(kind){return T[kind].map((x,i)=>`<div class="money">
   <input class="in" data-b="town.${kind}.${i}.name" value="${esc(x.name)}" aria-label="Name">
   <input class="in" type="number" data-b="town.${kind}.${i}.amt" value="${x.amt}" style="text-align:right" aria-label="Amount">
@@ -1053,6 +1163,7 @@ function renderTown(){
   <section class="card">
     <h2>Income <button class="btn sm" data-a="add" data-k="town.income">Add</button></h2>
     ${moneyRows("income")||`<p class="muted">No income yet.</p>`}
+    ${buildingIncome()?`<p class="small"><span class="muted">From finished buildings:</span> <strong class="pos">+${fmt(buildingIncome())} gp</strong></p>`:""}
     <h2 style="margin-top:16px">Expenses <button class="btn sm" data-a="add" data-k="town.expenses">Add</button></h2>
     ${moneyRows("expenses")||`<p class="muted">No expenses yet.</p>`}
   </section>
@@ -1070,8 +1181,17 @@ function renderTown(){
       <input class="in" type="number" data-b="town.projects.${i}.cost" value="${p.cost}" placeholder="Cost" aria-label="Cost gp" style="text-align:right">
       <select class="in stsel" data-b="town.projects.${i}.status">${["Planned","Building","Done"].map(o=>`<option ${p.status===o?"selected":""}>${o}</option>`).join("")}</select>
       <button class="x" data-a="del" data-k="town.projects" data-i="${i}" aria-label="Remove">×</button>
+      <label class="small muted" style="grid-column:1/-1">Income per turn once done <input class="in num" type="number" data-b="town.projects.${i}.income" value="${p.income||0}" style="width:100px"></label>
       ${p.status==="Planned"&&Number(p.cost)>0?`<button class="btn sm" style="grid-column:1/-1;justify-self:start" data-a="fund" data-i="${i}">Pay ${fmt(p.cost)} gp from treasury and start</button>`:""}
     </div>`).join(""):`<p class="muted">Add a building, upgrade or project the town is working on.</p>`}
+  </section>
+  <section class="card">
+    <h2>Initiative order <span class="row"><button class="btn sm" data-a="initAdd">Add</button>${(T.initiative||[]).length?`<button class="btn sm ghost" data-a="initClear">Clear</button>`:""}</span></h2>
+    ${(T.initiative||[]).length?(T.initiative.map((x,i)=>({...x,i})).sort((a,b)=>Number(b.init)-Number(a.init)).map(x=>`<div class="money"><input class="in" data-b="town.initiative.${x.i}.name" value="${esc(x.name)}" aria-label="Name"><input class="in" type="number" data-b="town.initiative.${x.i}.init" value="${x.init}" style="text-align:right" aria-label="Initiative"><button class="x" data-a="initDel" data-i="${x.i}" aria-label="Remove">×</button></div>`).join("")):`<p class="muted">Players’ initiative shows up here when they start combat. Add monsters with Add.</p>`}
+  </section>
+  <section class="card">
+    <h2>Random events <span class="row"><button class="btn sm" data-a="add" data-k="town.events">Add</button><button class="btn sm gold" data-a="eventRoll">Roll an event</button></span></h2>
+    ${(T.events||[]).length?T.events.map((x,i)=>`<div class="row" style="flex-wrap:nowrap;margin-bottom:6px"><span class="muted small" style="width:24px">${i+1}</span><input class="in" data-b="town.events.${i}.text" value="${esc(x.text)}" placeholder="e.g. Merchants arrive: +200 gp" style="flex:1"><button class="x" data-a="del" data-k="town.events" data-i="${i}" aria-label="Remove">×</button></div>`).join(""):`<p class="muted">List things that can happen to the town. “Roll an event” picks one and writes it in the chronicle.</p>`}
   </section>
   <section class="card" style="grid-column:1/-1">
     <h2>Chronicle</h2>
@@ -1090,6 +1210,7 @@ function renderNotes(){
 
 /* ---------- render ---------- */
 function render(){
+  derive();
   renderHeader();
   const y=window.scrollY;
   const m=document.getElementById("main");
@@ -1119,7 +1240,7 @@ function doRest(kind){
     let regain=Math.max(1,Math.floor(totalLevel()/2));
     S.hd.slice().sort((a,b)=>b.die-a.die).forEach(h=>{const r=Math.min(h.used,regain);h.used-=r;regain-=r});
     if(S.exhaustion>0)S.exhaustion--;
-    S.conc=""; S.shield=false; S.bladesong=false; S.riders=[]; if(S.combat) S.combat.on=false; if(S.kin) S.kin.aura=false;
+    S.conc=""; S.shield=false; S.bladesong=false; S.riders=[]; S.marks={}; S.effects=[]; if(S.combat) S.combat.on=false; if(S.kin) S.kin.aura=false;
     toast("Long rest done: HP, slots and features restored. You can change prepared spells and use Cantrip Formulas now.",4500);
   }
   save(); render();
@@ -1156,7 +1277,7 @@ document.addEventListener("click",e=>{
     case "hp": {
       const inp=document.getElementById("hpAmt"); const n=Math.max(0,Math.floor(Number(inp.value)||0)); if(!n&&k!=="temp"){inp.focus();return;}
       if(k==="dmg"){ let d=n; const t=Math.min(S.hp.temp,d); S.hp.temp-=t; d-=t; S.hp.cur=Math.max(0,S.hp.cur-d);
-        if(S.conc) toast(`Concentration check: Con save DC ${Math.max(10,Math.floor(n/2))} to keep ${S.conc}.${S.bladesong?` Bladesong adds +${bsBonus()}.`:""}`,4500);
+        if(S.conc&&S.hp.cur>0) concentrationCheck(n); else if(S.conc) dropConcentration();
         if(S.hp.cur===0) toast("You’re down. Death saves are showing.",3500); }
       else if(k==="heal"){ if(S.hp.cur===0)S.death={s:0,f:0}; S.hp.cur=Math.min(S.hp.max,S.hp.cur+n); }
       else S.hp.temp=n;
@@ -1166,13 +1287,29 @@ document.addEventListener("click",e=>{
     case "aura": { if(!S||!S.kin) return; const k=S.kin; const fly=k.aura&&/cyclonic/i.test(k.stance); k.aura=!k.aura; if(k.aura){ spend("bonus"); if(inCombat()&&S.combat.auraLock===S.combat.round) spendWarn+="Your aura overflowed this round, so normally it can’t come back until your next turn. "; } save(); render();
       toast(k.aura?(k.stance?`Aura on. Stance: ${k.stance}.`:"Aura on. No stance picked."):fly?"Aura off. Cyclonic Ascent ends, so you fall unless something holds you up.":"Aura off."); return; }
     case "bladesong": { const f=bsFeature(); if(!f) return;
-      if(S.bladesong){ S.bladesong=false; if(inCombat()) S.combat.move=Math.max(0,S.combat.move-10); save(); render(); toast("Bladesong ended."); return; }
+      if(S.bladesong){ S.bladesong=false; if(S.effects) S.effects=S.effects.filter(x=>!/^bladesong$/i.test(x.name)); if(inCombat()) S.combat.move=Math.max(0,S.combat.move-10); save(); render(); toast("Bladesong ended."); return; }
       if(f.max>0&&f.used>=f.max){ toast("No Bladesong uses left. They come back after a long rest.",3500); return; }
       if(inCombat()) S.combat.move+=10;
-      if(f.max>0) f.used++; S.bladesong=true; spend("bonus"); save(); render();
+      if(f.max>0) f.used++; S.bladesong=true; spend("bonus"); addEffect("Bladesong",10); save(); render();
       toast(`Bladesong (1 minute): AC +${bsBonus()}, speed +10 ft, advantage on Acrobatics, +${bsBonus()} on concentration saves. Ends with medium or heavy armor, a shield, or a two-handed attack.`,6000); return; }
     case "combatStart": startCombat(); return;
     case "rollMode": S.rollMode=k; save(); render(); return;
+    case "markToggle": { S.marks=S.marks||{}; S.marks[k]=!S.marks[k]; save(); render(); return; }
+    case "atkType": { const row=curAtk&&curAtk.rows[i]; if(row){ row.type=k; paintAttack(); } return; }
+    case "atkExtra": { const c=curAtk; if(!c||!c.extra||c.extraDone) return; c.extraDone=rollDamage(c.extra.dmg)||{total:0,txt:c.extra.dmg}; paintAttack(); return; }
+    case "effectDel": { const x=S.effects[i]; S.effects.splice(i,1); if(x) endEffect(x.name); save(); render(); return; }
+    case "effectAdd": modal(`<h2>Timed effect</h2><label class="small muted">What<input class="in" id="efName" placeholder="e.g. Blinded (Solar Detonation)" style="margin:2px 0 8px;color:var(--ink)"></label>
+      <label class="small muted">How long<select class="in" id="efRounds" style="margin:2px 0 8px"><option value="1">1 round</option><option value="10" selected>1 minute (10 rounds)</option><option value="100">10 minutes (100 rounds)</option></select></label>
+      <button class="btn pri" data-a="effectSave" style="text-align:center">Add</button>`); setTimeout(()=>document.getElementById("efName")?.focus(),50); return;
+    case "effectSave": { const n=document.getElementById("efName").value.trim(); if(!n) return; addEffect(n,Number(document.getElementById("efRounds").value)); closeModal(); save(); render(); return; }
+    case "autoProf": S.autoProf=S.autoProf===false?true:false; save(); render(); return;
+    case "levelUp": levelUpModal(); return;
+    case "luDo": levelUp(k); return;
+    case "initDel": T.initiative.splice(i,1); save(); render(); return;
+    case "initAdd": T.initiative=T.initiative||[]; T.initiative.push({name:"Monster",init:10}); save(); render(); return;
+    case "initClear": modal(`<h2>Clear the initiative order?</h2><button class="btn dmg" data-a="initClearYes" style="text-align:center">Clear</button>`); return;
+    case "initClearYes": T.initiative=[]; closeModal(); save(); render(); return;
+    case "eventRoll": { const ev=(T.events||[]).filter(x=>String(x.text||"").trim()); if(!ev.length){ toast("Add some events first."); return; } const pick=ev[roll(ev.length)-1]; addTownLog(`Event: ${pick.text}`,0); save(); render(); showRoll("Town event",[{label:`d${ev.length}`,big:String(ev.indexOf(pick)+1),sub:pick.text}],"Added to the chronicle."); return; }
     case "spDmg": spellDmgModal(i); return;
     case "spDmgSave": { const sp=S.spells[i]; sp.dmg=document.getElementById("sdDmg").value.trim(); const up=document.getElementById("sdUp"); sp.up=up?up.value.trim():""; sp.hit=document.getElementById("sdHit").value; sp.save=document.getElementById("sdSave").value; if(!sp.dmg){ delete sp.dmg; delete sp.up; } closeModal(); save(); render(); toast("Damage saved."); return; }
     case "spDmgClear": { const sp=S.spells[i]; delete sp.dmg; delete sp.up; closeModal(); save(); render(); return; }
@@ -1214,7 +1351,7 @@ document.addEventListener("click",e=>{
       save(); render(); toast(`${n}: ${d}${slot==="attack"&&c.atk?` ${c.atk} more attack${c.atk>1?"s":""} this turn.`:""}`,5000); return; }
     case "tGather": spend("bonus"); S.combat.move=0; S.combat.gather=true; save(); render(); toast(`Gather Power: speed 0 this turn. Your first blast or Basic impulse adds +${S.kin.gather}.`,4500); return;
     case "tBonusAtk": { spend("bonus"); save(); render(); const a=S.attacks.find(x=>/crossbow/i.test(x.name)); if(a) rollAttack(a); else toast("Bonus shot."); return; }
-    case "tFeat": { const f=S.features[i]; if(f.max>0&&f.used>=f.max){ toast(`No ${f.name} uses left.`); return; } if(f.max>0) f.used++; spend(k); save(); render(); toast(`${f.name} used.`); return; }
+    case "tFeat": { const f=S.features[i]; if(f.max>0&&f.used>=f.max){ toast(`No ${f.name} uses left.`); return; } if(f.max>0) f.used++; spend(k); if(/hexblade.s curse/i.test(f.name)){ S.marks=S.marks||{}; S.marks.curse=true; } save(); render(); toast(`${f.name} used.`); return; }
     case "featEdit": e.preventDefault(); featEditModal(i); return;
     case "featSave": featSave(i); return;
     case "featFilter": featFilter=k; render(); return;
@@ -1222,7 +1359,7 @@ document.addEventListener("click",e=>{
     case "impUse": impUseModal(i); return;
     case "impConfirm": closeModal(); useImpulse(i,k); return;
     case "impConc": S.kin.impulses[i].c=!S.kin.impulses[i].c; save(); render(); return;
-    case "dropConc": if(S.riders) S.riders=S.riders.filter(r=>r.name!==S.conc); S.conc=""; save(); render(); return;
+    case "dropConc": dropConcentration(); save(); render(); return;
     case "cond": { const c=S.conditions; const ix=c.indexOf(k); ix>=0?c.splice(ix,1):c.push(k); save(); render(); return; }
     case "exh": S.exhaustion=S.exhaustion===i?i-1:i; save(); render(); return;
     case "featUse": { const f=S.features[i]; const avail=f.max-f.used; f.used=j<avail?f.used+1:f.used-1; f.used=Math.max(0,Math.min(f.max,f.used)); save(); render(); return; }
@@ -1274,7 +1411,8 @@ document.addEventListener("click",e=>{
       if(k==="pact") S.pact.used++; else if(k!=="ritual") S.slots[k].used++;
       if(k!=="ritual") spend(castTime(s.name));
       { const lv=k==="pact"?S.pact.level:k==="ritual"?s.lvl:Number(k);
-        if(isSmite(s)&&s.dmg){ addRider(s,lv); spendWarn+=`${s.name} is ready: it adds ${spellDmgAt(s,lv)} to your next melee weapon hit. `; } else rollSpell(s,lv); }
+        if(/^hex$/i.test(s.name)){ S.marks=S.marks||{}; S.marks.hex=true; spendWarn+="Target Hexed: each hit adds 1d6 necrotic. "; }
+        else if(isSmite(s)&&s.dmg){ addRider(s,lv); spendWarn+=`${s.name} is ready: it adds ${spellDmgAt(s,lv)} to your next melee weapon hit. `; } else rollSpell(s,lv); }
       if(s.c) S.conc=s.name;
       closeModal(); save(); render(); toast(`Cast ${s.name}${k==="ritual"?" as a ritual":k==="pact"?" with a pact slot":" at "+ORD[k]+" level"}.`); return; }
     case "addSpell": if(!Object.keys(S.sources).length){ S.sources.main={label:"Spellcasting",abil:"int",prepares:false,level:1}; save(); } modal(`<h2>Add spell</h2>
@@ -1289,7 +1427,7 @@ document.addEventListener("click",e=>{
     case "gp": { const inp=document.getElementById("gpAmt"); const n=Math.floor(Number(inp.value)||0); if(!n){inp.focus();return;} S.coins.gp=Number(S.coins.gp)+n*Number(k); save(); render(); toast(`${k==="1"?"Added":"Spent"} ${fmt(n)} gp.`); return; }
     case "add": {
       const blank={attacks:{name:"New attack",bonus:"+0",dmg:"",note:""},features:{name:"New feature",max:0,used:0,reset:"none",text:""},items:{name:"",qty:1,note:"",attune:false},
-        "town.income":{name:"New income",amt:0},"town.expenses":{name:"New expense",amt:0},"town.stats":{name:"New stat",val:0},"town.projects":{name:"",cost:0,status:"Planned"},
+        "town.income":{name:"New income",amt:0},"town.expenses":{name:"New expense",amt:0},"town.stats":{name:"New stat",val:0},"town.projects":{name:"",cost:0,status:"Planned",income:0},"town.events":{text:""},
         "kin.impulses":{name:"New impulse",el:"",lvl:1,type:"Basic",act:"Action",range:"",dmg:"",text:"",c:false}}[k];
       getP(k).push(clone(blank)); save(); render(); return; }
     case "del": { const arr=getP(k); const label=arr[i]?.name||"this"; modal(`<h2>Remove ${esc(label)}?</h2><button class="btn dmg" data-a="confirmDel" data-k="${k}" data-i="${i}" style="text-align:center">Remove</button>`); return; }
@@ -1315,7 +1453,7 @@ document.addEventListener("input",e=>{
   if(e.target.id==="featSearch"){ featSearch=e.target.value; render(); const el=document.getElementById("featSearch"); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } return; }
   const p=e.target.dataset?.b; if(!p) return;
   let v=e.target.value; if(e.target.type==="number") v=v===""?0:Number(v); if(e.target.type==="checkbox") v=e.target.checked;
-  setP(p,v); save(); if(p==="name"||p==="race"||p==="classes"||(TOWN_ONLY&&p.startsWith("town."))) renderHeader();
+  setP(p,v); if(p==="combat.init") syncInit(); save(); if(p==="name"||p==="race"||p==="classes"||(TOWN_ONLY&&p.startsWith("town."))) renderHeader();
 });
 document.addEventListener("change",e=>{
   if(e.target.id==="importFile"){ importBackup(e.target.files[0]); return; }
@@ -1377,7 +1515,7 @@ const BLANK_CHAR={
   coins:{cp:0,sp:0,ep:0,gp:0,pp:0},
   items:[], profText:"", notes:""
 };
-const BLANK_TOWN={v:1, updatedAt:0, name:"New town", turn:1, treasury:0, income:[], expenses:[], stats:[], projects:[], log:[]};
+const BLANK_TOWN={v:1, updatedAt:0, name:"New town", turn:1, treasury:0, income:[], expenses:[], stats:[], projects:[], log:[], initiative:[], events:[]};
 
 const CH={}, TW={};           // id -> doc
 let activeC=null, activeT=null;
@@ -1392,7 +1530,7 @@ const LS={
   del(k){try{localStorage.removeItem(k)}catch(e){}}
 };
 // Towns live under one shared prefix so the character app and the town app use the same copy on a device.
-const TNS="dnd2", TOWN_IDS=TNS+"-town-ids";
+const TNS=TEST?"dndtest":"dnd2", TOWN_IDS=TNS+"-town-ids";
 const docKey=(k,id)=>`${k==="t"?TNS:NS}-${k}:${id}`;
 const metaKey=(k,id)=>`${k==="t"?TNS:NS}-meta-${k}:${id}`;
 function getMeta(k,id){return LS.get(metaKey(k,id),{rev:null,base:null,pending:false,owner:null})}
@@ -1534,7 +1672,7 @@ const timeout=ms=>new Promise((_,rej)=>setTimeout(()=>rej(new Error("The server 
 const withTimeout=(p,ms=12000)=>Promise.race([p,timeout(ms)]);
 
 function initClient(){
-  if(sb||!CFG.url||!CFG.key||!window.supabase) return;
+  if(TEST||sb||!CFG.url||!CFG.key||!window.supabase) return;
   try{
     // Both apps share one sign-in. supabase-js coordinates pages that use the same storageKey (locks + BroadcastChannel).
     try{ if(!localStorage.getItem("dnd-sync-auth")&&localStorage.getItem("dndtown-auth")) localStorage.setItem("dnd-sync-auth",localStorage.getItem("dndtown-auth")); localStorage.removeItem("dndtown-auth"); }catch(e){}
@@ -1779,7 +1917,7 @@ window.addEventListener("beforeinstallprompt",e=>{ e.preventDefault(); installEv
 setInterval(check,20000);
 
 bootLocal(); initClient(); render(); paintSaveState(); setTimeout(()=>sync(),300);
-if("serviceWorker" in navigator){
+if("serviceWorker" in navigator&&!TEST){
   window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
   // sw.js tells us when it downloaded a newer copy of the app than the one on screen
   navigator.serviceWorker.addEventListener("message",e=>{ if(e.data&&e.data.type==="update") document.getElementById("updPill").hidden=false; });

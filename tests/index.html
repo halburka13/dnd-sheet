@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>App tests</title>
+<style>
+  :root{--bg:#F2EFF6;--ink:#221C2E;--muted:#6B6280;--ok:#2D7F55;--bad:#B3364A;--line:#D6CFE2}
+  @media (prefers-color-scheme: dark){:root{--bg:#17141F;--ink:#ECE7F4;--muted:#A49BB8;--ok:#7BD69A;--bad:#F07A8C;--line:#3A3349}}
+  body{margin:0;padding:16px;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,sans-serif}
+  h1{font-size:24px;margin:0 0 4px} .sum{font-size:20px;font-weight:700;margin:8px 0 16px}
+  .ok{color:var(--ok)} .bad{color:var(--bad)} .muted{color:var(--muted)}
+  li{padding:3px 0;border-bottom:1px solid var(--line);list-style:none} ul{padding:0}
+  iframe{width:1px;height:1px;border:0;position:absolute;left:-9999px}
+</style>
+</head>
+<body>
+<h1>App tests</h1>
+<p class="muted">Runs the character app in test mode (separate storage, no syncing, nothing touches your real data) and checks the rules. Dice are made predictable for the checks.</p>
+<div class="sum" id="sum">Running…</div>
+<ul id="out"></ul>
+<iframe id="app" src="../index.html?test=1" title="App under test"></iframe>
+<script>
+"use strict";
+const out=document.getElementById("out"), results=[];
+function check(name,cond,detail){ results.push({name,ok:!!cond,detail}); }
+function eq(name,got,want){ const ok=JSON.stringify(got)===JSON.stringify(want); check(name,ok,ok?"":`got ${JSON.stringify(got)}, wanted ${JSON.stringify(want)}`); }
+// Clear any earlier test data (test mode uses its own "dndtest" keys)
+try{ Object.keys(localStorage).filter(k=>k.startsWith("dndtest")).forEach(k=>localStorage.removeItem(k)); }catch(e){}
+document.getElementById("app").addEventListener("load",()=>setTimeout(run,300));
+function run(){
+  const w=document.getElementById("app").contentWindow;
+  try{ tests(w); }catch(e){ check("Tests finished without a crash",false,String(e&&e.stack||e)); }
+  const bad=results.filter(r=>!r.ok).length;
+  document.getElementById("sum").innerHTML=bad?`<span class="bad">${bad} of ${results.length} checks failed</span>`:`<span class="ok">All ${results.length} checks passed</span>`;
+  out.innerHTML=results.map(r=>`<li class="${r.ok?"ok":"bad"}">${r.ok?"✓":"✗"} ${r.name}${r.detail?` <span class="muted">— ${r.detail.replace(/</g,"&lt;")}</span>`:""}</li>`).join("");
+  try{ Object.keys(localStorage).filter(k=>k.startsWith("dndtest")).forEach(k=>localStorage.removeItem(k)); }catch(e){}
+}
+function tests(w){
+  const g=(expr)=>w.eval(expr);
+  check("Runs in test mode (no sync, own storage)", g("TEST&&NS==='dndtest'&&TNS==='dndtest'&&!sb"));
+
+  // ---- dice parsing ----
+  eq("parseDice: 1d8+4 fire", g("parseDice('1d8+4 fire/radiant')"), {dice:[{n:1,neg:false,d:8}],flat:4});
+  eq("parseDice: two dice groups", g("parseDice('3d12 lightning + 1d10 thunder').dice.length"), 2);
+  eq("parseDice: ignores ranges like 60 ft", g("parseDice('Fly 40 ft, hover')"), {dice:[],flat:0});
+  w.Math.random=()=>0.999; // every die rolls its maximum
+  eq("rollDamage: max roll 2d6+3", g("rollDamage('2d6+3').total"), 15);
+  eq("rollDamage: crit doubles dice, not the bonus", g("rollDamage('1d8+5',true).total"), 21);
+
+  // ---- a test character ----
+  g(`(function(){
+    const c=clone(DEFAULT); delete c.town; c.attacks=[{name:"Warhammer",bonus:"",dmg:"",note:"Melee 5 ft",ab:"cha",dice:"1d8 bludgeoning"},{name:"Hand crossbow",bonus:"",dmg:"",note:"30/120 ft",ab:"cha",dice:"1d6 piercing"}];
+    c.features.push({name:"Extra Attack",max:0,used:0,reset:"none",text:""});
+    c.spells.forEach(s=>{ if(s.name==="Eldritch Blast") Object.assign(s,{base:"1d10 force",grow:"beams",addMod:"cha",hit:"attack"});
+      if(s.name==="Booming Blade") Object.assign(s,{base:"+1d8 thunder",grow:"dice-1",hit:"weapon",extraBase:"1d8 thunder",extraGrow:"dice",extraLabel:"Target moved"});
+      if(s.name==="Green-Flame Blade") Object.assign(s,{base:"+1d8 fire",grow:"dice-1",hit:"weapon"});
+      if(s.name==="Wrathful Smite") Object.assign(s,{dmg:"1d6 psychic",hit:"auto",save:"Wis"}); });
+    newChar("Test Galesh"); Object.assign(S,fillChar(c)); S.name="Test Galesh"; save(); render();
+  })()`);
+  eq("Auto proficiency at level 9 is +4", g("S.prof"), 4);
+  eq("Auto attack bonus: Cha 20 + 4 = +9", g("S.attacks[0].bonus"), "+9");
+  eq("Auto attack damage adds Cha", g("S.attacks[0].dmg"), "1d8+5 bludgeoning");
+  eq("Eldritch Blast at level 9: 2 beams with Cha", g("S.spells.find(s=>s.name==='Eldritch Blast').dmg"), "1d10+5 force ×2 beams");
+  eq("Booming Blade at level 9 adds 1d8", g("S.spells.find(s=>s.name==='Booming Blade').dmg"), "+1d8 thunder");
+  eq("Booming Blade move damage at level 9 is 2d8", g("S.spells.find(s=>s.name==='Booming Blade').extra"), "2d8 thunder");
+  g("S.hd[1].total=8; render();"); // level 11
+  eq("Level 11: proficiency +4, Eldritch Blast 3 beams", g("[S.prof,S.spells.find(s=>s.name==='Eldritch Blast').dmg]"), [4,"1d10+5 force ×3 beams"]);
+  g("S.hd[1].total=6; render();");
+
+  // ---- turn tracker ----
+  g("tab='combat'; render(); startCombat();");
+  check("Start combat rolls and keeps initiative", g("typeof S.combat.init==='number'"));
+  const idx=n=>g(`S.spells.findIndex(s=>s.name==='${n}')`);
+  const click=(sel)=>{ const el=w.document.querySelector(sel); if(!el) throw new Error("missing button "+sel); el.click(); };
+  click(`.opts [data-a="tAttack"][data-i="0"]`);
+  eq("First weapon attack uses the action, 1 attack left", g("[S.combat.action,S.combat.atk]"), [true,1]);
+  click(`.opts [data-a="tCast"][data-i="${idx("Booming Blade")}"]`);
+  eq("A cantrip can replace the second attack", g("[S.combat.atk,S.combat.cantripSwap]"), [0,true]);
+  click(`.opts [data-a="tCast"][data-i="${idx("Green-Flame Blade")}"]`);
+  check("A second cantrip is blocked", g("!!document.querySelector('.modal')&&/Already used/.test(document.querySelector('.modal').innerText)"));
+  g("closeModal(); nextTurn();");
+  eq("Next turn gives everything back", g("[S.combat.action,S.combat.bonus,S.combat.reaction,S.combat.atk]"), [false,false,false,0]);
+
+  // ---- two-phase attack, smite rider, Hex and Curse ----
+  g("S.riders=[{name:'Wrathful Smite',dmg:'1d6 psychic',note:''}]; S.marks={hex:true,curse:true}; render();");
+  w.Math.random=()=>0.5; // d20 = 11, d6 = 4, d8 = 5
+  click(`.opts [data-a="tAttack"][data-i="1"]`); // hand crossbow: ranged
+  eq("Attack waits for Hit or Miss", g("curAtk.rows[0].state"), "?");
+  g("atkResolve(0,true)");
+  eq("Ranged hit: crossbow + Hex + Curse, smite still waiting", g("[curAtk.rows[0].dmg.total,S.riders.length]"), [4+5+4+4,1]);
+  click(`.opts [data-a="tAttack"][data-i="0"]`); // warhammer: melee (second attack of the action)
+  g("atkResolve(0,false)");
+  eq("A miss rolls nothing and keeps the smite", g("[curAtk.rows[0].dmg,S.riders.length]"), [null,1]);
+  g("nextTurn();");
+  click(`.opts [data-a="tAttack"][data-i="0"]`);
+  g("atkResolve(0,true)");
+  eq("Melee hit adds the smite, Hex and Curse", g("[curAtk.rows[0].dmg.total,S.riders.length]"), [5+5+4+4+4,0]);
+  w.Math.random=()=>0.9; // d20 = 19
+  click(`.opts [data-a="tAttack"][data-i="0"]`);
+  check("Hexblade’s Curse: a 19 is a critical hit", g("curAtk.rows[0].crit===true&&curAtk.rows[0].state==='hit'"));
+  w.Math.random=()=>0.5;
+
+  // ---- concentration, effects ----
+  g("S.conc='Hex'; S.hp.cur=S.hp.max; concentrationCheck(10);");
+  check("Concentration check (DC 10, Con save +7 with 11 on the die) keeps Hex", g("S.conc==='Hex'"));
+  w.Math.random=()=>0.0; g("concentrationCheck(40);"); w.Math.random=()=>0.5;
+  check("Failed concentration drops Hex and its target mark", g("S.conc===''&&!S.marks.hex"));
+  g("addEffect('Test effect',2); nextTurn();"); eq("Effects count down", g("S.effects.find(x=>x.name==='Test effect').rounds"), 1);
+  g("nextTurn();"); check("Effects end at 0", g("!S.effects.some(x=>x.name==='Test effect')"));
+
+  // ---- level up ----
+  g("levelUpModal(); document.querySelector('input[name=luCls][value=\"0\"]').checked=true;");
+  const hpBefore=g("S.hp.max"); g("levelUp('avg')");
+  eq("Level up (average d8 + Con 3) adds 8 HP", g("S.hp.max")-hpBefore, 8);
+  eq("Level up raises total level to 10", g("totalLevel()"), 10);
+
+  // ---- kineticist table ----
+  eq("Kineticist table at level 9", g("kinTable(9)"), {ilvl:5,count:2,gather:"2d6",known:7});
+  eq("Kineticist table at level 11", g("[kinTable(11).count,kinTable(11).gather]"), [3,"3d6"]);
+
+  // ---- town: building income, initiative, events ----
+  g("if(!T) newTown('Test town'); T.income=[{name:'Tax',amt:100}]; T.expenses=[{name:'Wages',amt:30}]; T.projects=[{name:'Mill',cost:0,status:'Done',income:50},{name:'Wall',cost:0,status:'Building',income:500}]; render();");
+  eq("Town income counts finished buildings only", g("townNet()"), 120);
+  g("S.combat.init=17; syncInit();");
+  check("Starting combat puts you in the town’s initiative order", g("T.initiative.some(x=>x.name==='Test Galesh'&&x.init===17)"));
+
+  // ---- sync merge rules ----
+  eq("Merge: treasury adds both devices’ changes", g("merge3({town:{treasury:100}},{town:{treasury:150}},{town:{treasury:130}},true,'').town.treasury"), 180);
+  eq("Merge: a null clears a field on both devices", g("merge3({combats:[1]},{combats:[1]},{combats:null},true,'').combats"), null);
+  eq("Merge: newer edit wins on a conflict", g("merge3({name:'A'},{name:'B'},{name:'C'},true,'').name"), "B");
+}
+</script>
+</body>
+</html>
