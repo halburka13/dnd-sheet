@@ -192,6 +192,21 @@ h3+.feat{border-top:0}
 .rb-line.crit b{color:var(--gold)} .rb-line.miss b{color:var(--blood)}
 .rb-ask{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line)} .rb-ask span{flex:1;font-weight:700}
 .rb-ask .btn{min-width:84px;text-align:center}
+.portrait{width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid var(--line);flex:none}
+.portrait.big{width:88px;height:88px} .portrait.empty{display:flex;align-items:center;justify-content:center;background:var(--panel2);color:var(--muted);font-family:var(--display);font-size:32px}
+.quest{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line)} .quest.done .in{opacity:.6;text-decoration:line-through}
+.npc{padding:8px 0;border-top:1px solid var(--line)} .note-entry{border-top:1px solid var(--line);padding:6px 0} .note-entry summary{cursor:pointer;min-height:36px;display:flex;align-items:center;gap:8px}
+.note-entry label{display:block;margin-top:6px}
+.grid>.card{min-width:0} .note-entry .row .in{width:auto}
+details *{box-sizing:border-box} /* content inside <details> doesn't inherit box-sizing through the browser's own shadow box */
+#printRoot{display:none}
+@media print{
+  body>*:not(#printRoot){display:none!important} #printRoot{display:block!important;color:#000;background:#fff;font:12px/1.4 Georgia,serif}
+  body{background:#fff!important} body::before{display:none}
+  .ps h1{font-size:26px;margin:0} .ps h2{font-size:16px;margin:12px 0 4px;border-bottom:1px solid #999} .ps p{margin:2px 0}
+  .ps-hd{display:flex;gap:12px;align-items:center} .ps-hd img{width:80px;height:80px;border-radius:50%;object-fit:cover}
+  .ps-row{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0} .ps-row div{border:1px solid #999;border-radius:6px;padding:4px 8px;text-align:center;min-width:70px} .ps-row b{display:block;font-size:18px} .ps-row span{font-size:10px}
+}
 .effects{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px}
 .effect{display:inline-flex;align-items:center;gap:6px;padding:4px 4px 4px 10px;border-radius:999px;background:var(--panel2);font-size:14px}
 .rb-types{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0}
@@ -246,11 +261,13 @@ button.v.rollv{background:none;border:1px solid var(--line);border-radius:8px;mi
 <body>
 <header class="top">
   <div class="topin">
+    <img id="hPic" class="portrait" alt="" hidden>
     <div class="who" data-a="chars" role="button" tabindex="0" title="Switch character" style="cursor:pointer"><h1 id="hName"></h1><p id="hSub"></p></div>
     <div class="vitals" id="vitals"></div>
     <button id="syncPill" class="syncpill" data-a="resync" hidden></button>
     <button id="updPill" class="syncpill" data-a="reloadApp" hidden>New version ready · tap to update</button>
     <div class="rests">
+      <button class="btn" data-a="dice" aria-label="Roll dice">Dice</button>
       <button class="btn" data-a="chars">Characters</button>
       <button class="btn" data-a="shortRest">Short rest</button>
       <button class="btn" data-a="longRest">Long rest</button>
@@ -262,6 +279,7 @@ button.v.rollv{background:none;border:1px solid var(--line);border-radius:8px;mi
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="rollbox" role="status" aria-live="polite" hidden></div>
 <div id="modalRoot"></div>
+<div id="printRoot"></div>
 
 <script>
 "use strict";
@@ -481,7 +499,7 @@ function rollAttack(a){
   if(/weapon/i.test(dmgStr)){ const w=meleeWeapon(); melee=true; if(w){ dmgStr=w.dmg+" "+dmgStr.replace(/weapon/i,""); foot=`${w.name} ${w.dmg} plus ${dmgStr.replace(w.dmg,"").trim()}`; } }
   const rows=[], cm=critMin();
   const types=(dmgStr.match(/([a-z]+(?:\/[a-z]+)+)/i)||[])[1];
-  for(let b=0;b<beams;b++){ const r=d20(); rows.push({label:beams>1?`Beam ${b+1}`:"Attack",toHit:r.n+bonus,sub:`d20 ${r.txt} ${sgn(bonus)}${cm<20&&r.n===19?" (19 crits: Hexblade’s Curse)":""}`,crit:r.n>=cm,nat1:r.n===1,state:"?",dmg:null,types:types?types.split("/"):null,type:types?types.split("/")[0]:null}); }
+  for(let b=0;b<beams;b++){ const r=d20For("attack"); rows.push({label:beams>1?`Beam ${b+1}`:"Attack",toHit:r.n+bonus,sub:`d20 ${r.txt} ${sgn(bonus)}${cm<20&&r.n===19?" (19 crits: Hexblade’s Curse)":""}`,crit:r.n>=cm,nat1:r.n===1,state:"?",dmg:null,types:types?types.split("/"):null,type:types?types.split("/")[0]:null}); }
   curAtk={title:a.name,foot,dmgStr,melee,blast:isBlast(a),rows,extra:a.extra||null,extraDone:null};
   rows.forEach((row,b)=>{ if(row.crit) atkResolve(b,true,true); else if(row.nat1) row.state="miss"; });
   rollLog.unshift({title:a.name,lines:[],foot,t:Date.now()}); rollLog=rollLog.slice(0,8);
@@ -569,6 +587,8 @@ function derive(){
     if(sp.extraBase) sp.extra=cantripDmg(sp.extraBase,sp.extraGrow,sp.extraMod);
   });
   if(S.kin&&S.kin.autoTable!==false){ const t=kinTable(totalLevel()); S.kin.ilvl=t.ilvl; S.kin.blast.count=t.count; S.kin.gather=t.gather||S.kin.gather; }
+  if(S.kin) S.kin.impulses.forEach(x=>{ if(x.base) x.dmg=impulseDmg(x); });
+  deriveSlots();
 }
 /* ---------- Hex and Hexblade's Curse on the current target ---------- */
 function hasHex(){ return S.spells.some(sp=>/^hex$/i.test(sp.name)) }
@@ -589,7 +609,7 @@ function endEffect(name){ if(/^bladesong$/i.test(name)&&S.bladesong){ S.bladeson
 function dropConcentration(){ const n=S.conc; if(!n) return; if(S.riders) S.riders=S.riders.filter(r=>r.name!==n); if(/^hex$/i.test(n)&&S.marks) S.marks.hex=false; if(S.effects) S.effects=S.effects.filter(x=>x.name!==n); S.conc=""; }
 /* Automatic concentration save when you take damage */
 function concentrationCheck(dmg){
-  const name=S.conc, dc=Math.max(10,Math.floor(dmg/2)), m=checkMod("save","con")+(S.bladesong?bsBonus():0), r=d20("normal");
+  const name=S.conc, dc=Math.max(10,Math.floor(dmg/2)), m=checkMod("save","con")+(S.bladesong?bsBonus():0), r=d20(condMode("save","con").mode==="dis"?"dis":"normal");
   const total=r.n+m, kept=r.n!==1&&total>=dc;
   if(!kept) dropConcentration();
   showRoll(`Concentration: ${name}`,[{label:`Con save DC ${dc}`,big:String(total),sub:`d20 ${r.txt} ${sgn(m)}${S.bladesong?" (includes Bladesong)":""}`,cls:kept?"":"miss"},{label:kept?"Kept":"Lost",big:kept?"✓":"✗",sub:kept?`${name} continues.`:`${name} ended.`,cls:kept?"crit":"miss"}],kept?"":"Wrong? Type the spell back into Concentration on the Combat tab.");
@@ -598,9 +618,9 @@ function concentrationCheck(dmg){
 function levelUpModal(){
   const cm=mod(S.abil.con);
   modal(`<h2>Level up</h2><p class="muted small">You’re level ${totalLevel()}. Pick which class gets the new level.</p>
-    ${S.hd.map((h,i)=>`<label class="row" style="margin-bottom:6px"><input type="radio" name="luCls" value="${i}" ${i===0?"checked":""}> d${h.die} class (now ${h.total} level${h.total>1?"s":""})</label>`).join("")}
+    ${S.hd.map((h,i)=>`<label class="row" style="margin-bottom:6px"><input type="radio" name="luCls" value="${i}" ${i===0?"checked":""}> ${esc(h.cls||`d${h.die} class`)} (now ${h.total}, d${h.die})</label>`).join("")}
     <label class="row" style="margin-bottom:10px"><input type="radio" name="luCls" value="new"> A new class with a d<select class="in" id="luDie" style="width:auto">${[6,8,10,12].map(d=>`<option>${d}</option>`).join("")}</select></label>
-    <label class="small muted">Class &amp; level text<input class="in" id="luText" value="${esc(S.classes)}" style="margin:2px 0 8px;color:var(--ink)"></label>
+    <label class="small muted">Class &amp; level text (update the numbers)<input class="in" id="luText" value="${esc(S.classes)}" style="margin:2px 0 8px;color:var(--ink)"></label>
     <p class="small muted">Hit points: die + Con (${sgn(cm)})${S.features.some(f=>/^tough$/i.test(f.name))?" + 2 (Tough)":""}.</p>
     <button class="btn pri" data-a="luDo" data-k="roll" style="text-align:center">Roll hit points</button>
     <button class="btn" data-a="luDo" data-k="avg" style="text-align:center">Take the average</button>`);
@@ -608,7 +628,7 @@ function levelUpModal(){
 function levelUp(how){
   const sel=document.querySelector('input[name="luCls"]:checked'), text=document.getElementById("luText").value.trim();
   const before={prof:S.prof,tier:cantripTier()};
-  let h; if(sel.value==="new"){ h={die:Number(document.getElementById("luDie").value),total:0,used:0}; S.hd.push(h); } else h=S.hd[Number(sel.value)];
+  let h; if(sel.value==="new"){ h={die:Number(document.getElementById("luDie").value),total:0,used:0,cls:"",caster:"none"}; S.hd.push(h); } else h=S.hd[Number(sel.value)];
   h.total++;
   const r=how==="roll"?roll(h.die):Math.floor(h.die/2)+1;
   const gain=Math.max(1,r+mod(S.abil.con)+(S.features.some(f=>/^tough$/i.test(f.name))?2:0));
@@ -619,9 +639,248 @@ function levelUp(how){
   if(cantripTier()!==before.tier) notes.push("Cantrip damage went up (updated automatically for cantrips with dice).");
   if(S.kin){ const t=kinTable(L); notes.push(`Kineticist ${L}: impulse level ${ORD[t.ilvl]}, ${t.count} blast${t.count>1?"s":""} per action, Gather Power ${t.gather}. You know ${t.known} impulses${t.known>KIN_KNOWN[L-1]?` (+${t.known-KIN_KNOWN[L-1]} new)`:""}.`); if(KIN_FEATURES[L]) notes.push(`New: ${KIN_FEATURES[L]}.`); }
   if([4,8,12,16,19].includes(h.total)) notes.push(`This class is now level ${h.total}: most classes get an ability score improvement or a feat here.`);
-  if(S.spells.length) notes.push("Check your spell slots and new spells on the Spells tab.");
+  if(autoSlots()) notes.push(`Spell slots updated (caster level ${casterLevel()}${S.pact.max?`, ${S.pact.max} pact slots at ${ORD[S.pact.level]} level`:""}). Pick new spells on the Spells tab.`);
+  else if(S.spells.length) notes.push("Check your spell slots and new spells on the Spells tab.");
+  if(S.kin&&S.kin.impulses.length<impulsesAllowed()) notes.push(`You can learn ${impulsesAllowed()-S.kin.impulses.length} more impulse${impulsesAllowed()-S.kin.impulses.length>1?"s":""}: Impulses tab → Learn impulse.`);
   closeModal(); save(); render();
   showRoll(`Level ${L}!`,notes.map((n,i)=>({label:i?"":"Done",big:i?"":"↑",sub:n})));
+}
+/* ---------- spell slots from classes ----------
+   hd[i].cls = class name, hd[i].caster = full | half | third | pact | none.
+   Multiclass caster level: full + half/2 + third/3 (rounded down); a single half/third caster rounds up. Pact slots follow the warlock table. */
+const FULL_SLOTS=[[],[2],[3],[4,2],[4,3],[4,3,2],[4,3,3],[4,3,3,1],[4,3,3,2],[4,3,3,3,1],[4,3,3,3,2],[4,3,3,3,2,1],[4,3,3,3,2,1],[4,3,3,3,2,1,1],[4,3,3,3,2,1,1],[4,3,3,3,2,1,1,1],[4,3,3,3,2,1,1,1],[4,3,3,3,2,1,1,1,1],[4,3,3,3,3,1,1,1,1],[4,3,3,3,3,2,1,1,1],[4,3,3,3,3,2,2,1,1]];
+const CASTER_TYPES=[["none","No spellcasting"],["full","Full caster (wizard, cleric…)"],["half","Half caster (paladin, ranger)"],["third","Third caster (eldritch knight…)"],["pact","Warlock pact magic"]];
+function casterLevel(){
+  const cs=S.hd.filter(h=>["full","half","third"].includes(h.caster)); if(!cs.length) return 0;
+  const single=cs.length===1;
+  return cs.reduce((a,h)=>a+(h.caster==="full"?h.total:h.caster==="half"?(single?Math.ceil(h.total/2):Math.floor(h.total/2)):(single?Math.ceil(h.total/3):Math.floor(h.total/3))),0);
+}
+function pactFor(L){ if(L<1) return {max:0,level:1}; return {max:L>=17?4:L>=11?3:L>=2?2:1,level:Math.min(5,Math.ceil(L/2))}; }
+function autoSlots(){ return S.autoSlots!==false&&S.hd.some(h=>h.caster&&h.caster!=="none") }
+function deriveSlots(){
+  if(!autoSlots()) return;
+  const row=FULL_SLOTS[Math.min(20,casterLevel())]||[];
+  for(let l=1;l<=9;l++){ const sl=S.slots[l]; sl.max=row[l-1]||0; sl.used=Math.min(sl.used,sl.max); }
+  const wl=S.hd.filter(h=>h.caster==="pact").reduce((a,h)=>a+h.total,0), pk=pactFor(wl);
+  S.pact.max=pk.max; S.pact.level=pk.level; S.pact.used=Math.min(S.pact.used,S.pact.max);
+}
+/* ---------- impulse catalog (Kineticist homebrew, short paraphrases) ----------
+   [name, element(s), level, type, action, range, damage at its level, extra per impulse level above, every N levels, save note, effect] */
+const IMPULSES=[
+ ["Burning Jet","Fire",1,"Basic","Action","Self","","",1,"","Move 40 ft in a straight line without opportunity attacks (60 ft any direction at 3rd, hover at 5th)."],
+ ["Eternal Torch","Fire",1,"Basic","Action","120 ft","","",1,"","A floating flame that sheds bright light; up to Con mod torches."],
+ ["Flying Flame","Fire",1,"Basic","Action","30 ft path","1d6 fire","1d6",1,"Dex save half","A flame flies along a path and hits each creature on it once."],
+ ["Scorching Column","Fire",1,"Complex","Action + bonus action","60 ft, 5 ft radius","1d6 fire","1d6",1,"Dex save half","Concentration. The column burns creatures moving through it."],
+ ["Blazing Wave","Fire",2,"Surge","Action","30 ft cone","3d6 fire","1d6",1,"Dex save half, prone on a fail","A wave of fire that knocks foes down."],
+ ["Thermal Nimbus","Fire",2,"Stance","Free with aura","Aura","","",1,"","Pick fire or cold: allies in the aura resist it; enemies entering or starting their turn there take prof (+Con at 5th) damage."],
+ ["Crawling Fire","Fire",3,"Basic","Action","30 ft","","",1,"","Concentration. A flaming creature that moves for you and can carry your fire impulses."],
+ ["Volcanic Escape","Fire",3,"Surge","Reaction","Self","1d6 fire","1d6",2,"Dex save half","When an enemy in your aura damages you: burn nearby foes and move half your speed without opportunity attacks."],
+ ["Kindle Inner Flames","Fire",4,"Stance","Free with aura","Aura","","",1,"","Allies get +1 Dex saves, a free 5 ft move, and +2 fire damage after moving 10 ft."],
+ ["Solar Detonation","Fire",4,"Complex","Action + bonus action","60 ft, 20 ft radius","6d6 fire","1d6",1,"Con save half, blinded on a fail","Undead and fiends take extra radiant. Blinded 1 minute (save each turn)."],
+ ["Architect of Flame","Fire",6,"Complex","Action + bonus action","60 ft wall","5d8 fire","1d8",1,"Dex save half","Concentration. A wall of fire that burns one side."],
+ ["Furnace Form","Fire",6,"Basic","Action","Self","","",1,"","Concentration. Fire immunity, fly 40 ft, burn creatures near you, bigger blasts."],
+ ["Walk Through the Conflagration","Fire",7,"Surge","Action","120 ft teleport","4d6 fire","1d6",1,"Dex save half","Teleport next to fire or a burning creature with a burst where you leave or arrive."],
+ ["All Shall End in Flames","Fire",9,"Complex","Action + bonus action","500 ft, 30 ft radius","13d6 fire","",1,"Dex save half","Creatures brought to 0 HP are turned to ash."],
+ ["Ignite the Sun","Fire",9,"Basic","Action","500 ft","7d6 fire","",1,"Dex save half","Concentration. A moving sun that burns creatures in it each round."],
+ ["Aerial Boomerang","Air",1,"Basic","Action","60 ft line","2d4 slashing","1d4",1,"Dex save half","Lingers until your next turn; recall it with a bonus action for another pass."],
+ ["Air Cushion","Air",1,"Basic","Reaction","60 ft","","",1,"","A falling creature falls gently (one more creature per impulse level above 1st)."],
+ ["Four Winds","Air",1,"Basic","Action","30 ft","","",1,"","Up to 4 willing creatures can use their reaction to move 10 ft (20 ft at 5th)."],
+ ["Whisper on the Wind","Air",1,"Basic","Action","500 ft","","",1,"","Send a short message on the wind (1 mile at 5th)."],
+ ["Air Shroud","Air",2,"Stance","Free with aura","Aura","","",1,"","Breathe anywhere; allies in the aura have half cover against ranged attacks."],
+ ["Lightning Dash","Air",2,"Surge","Action","30 ft line","2d12 lightning","1d12",2,"Dex save half","Dash through creatures without opportunity attacks; longer line at higher levels."],
+ ["Clear as Air","Air",3,"Surge","Action","Self","","",1,"","Concentration. Become invisible (greater invisibility at 6th)."],
+ ["Flinging Updraft","Air",3,"Basic","Action","60 ft","","",1,"Dex save if unwilling","Move a creature up to 30 ft in any direction without falling damage."],
+ ["Cyclonic Ascent","Air",4,"Stance","Free with aura","Self","","",1,"","Fly at your walking speed and hover while the aura is on; fall if it goes out."],
+ ["Storm Spiral","Air",4,"Complex","Action + bonus action","60 ft, 20 ft radius","3d12 lightning + 1d10 thunder","1d12 + 1d10",2,"Dex save half, deafened on a fail","Metal armor or metal creatures save with disadvantage."],
+ ["Ghosts in the Storm","Air",6,"Stance","Free with aura","Aura","","",1,"","Allies get +2 Dex saves; moving 10 ft gives attackers disadvantage and adds lightning damage."],
+ ["Wiles on the Wind","Air",6,"Basic","Action","500 ft","","",1,"Wis save","Concentration. A sound that charms or distracts creatures nearby."],
+ ["Body of Air","Air",7,"Complex","Action + bonus action","Self","","",1,"","Concentration. Gaseous form with a 30 ft flying speed."],
+ ["Crowned in Tempest's Fury","Air",9,"Stance","Free with aura","Aura","","",1,"","Fly, +1d12 lightning on air blasts, lightning damage to enemies in the aura."],
+ ["Infinite Expanse of the Bluest Heaven","Air",9,"Complex","Action + bonus action","100 ft, 20 ft radius","","",1,"Wis save","Concentration. Frightens creatures, who must flee."],
+ ["Armor in Earth","Earth",1,"Basic","Action","Self","","",1,"","AC 13 + Con for 10 minutes (−10 ft speed)."],
+ ["Geologic Attunement","Earth",1,"Stance","Free with aura","Aura","","",1,"","Tremorsense in the aura; mark a creature for your allies."],
+ ["Stepping Stones","Earth",1,"Basic","Action","60 ft","","",1,"","Concentration. A path or steps of stone."],
+ ["Tremor","Earth",1,"Surge","Action","30 ft, 10 ft radius","1d8 bludgeoning","1d8",1,"Con save half, prone on a fail","The ground becomes difficult terrain until your next turn."],
+ ["Calcifying Sand","Earth",2,"Surge","Reaction","5 ft","","",1,"Con save","Reduce a melee hit by your level; the attacker may be petrified briefly."],
+ ["Igneogenesis","Earth",2,"Basic","Action","5 ft","","",1,"","Create a stone object."],
+ ["Sand Snatcher","Earth",3,"Basic","Action","30 ft","","",1,"","Concentration. A sand hand that restrains a creature."],
+ ["Weight of Stone","Earth",3,"Complex","Action + bonus action","120 ft, 10 ft radius","4d8 bludgeoning","1d8",1,"Dex save half","Slams creatures down to the ground and prone."],
+ ["Spiked Skin","Earth",4,"Basic","Action","Touch","","",1,"","Reduce bludgeoning, piercing and slashing damage; spikes hurt melee attackers."],
+ ["Swim Through Earth","Earth",4,"Basic","Action","Self","","",1,"","Concentration. Burrow through loose earth."],
+ ["Rattle the Earth","Earth",6,"Surge","Action","60 ft cone","","",1,"Dex save","Knock creatures prone and open fissures."],
+ ["Rock Rampart","Earth",6,"Complex","Action + bonus action","60 ft wall","","",1,"","Concentration. A stone wall."],
+ ["Assume Earth's Mantle","Earth",7,"Stance","Free with aura","Self","","",1,"","Become Large with reach and great strength."],
+ ["Rebirth in Living Stone","Earth",9,"Stance","Free with aura","Self","","",1,"","40 temp HP, immune to crits, cannot be moved."],
+ ["The Shattered Mountain Weeps","Earth",9,"Complex","Action + bonus action","120 ft, 20 ft radius","9d10 bludgeoning","",1,"Con save half","Once per rest. Lingering damage in the area."],
+ ["Flashforge","Metal",1,"Basic","Action","30 ft","","",1,"","Create a simple metal item."],
+ ["Magnetic Pinions","Metal",1,"Complex","Action + bonus action","60 ft","1d4 bludgeoning + 1d4 piercing","1d4 + 1d4",1,"three impulse attacks","Up to three attacks; advantage against metal armor."],
+ ["Metal Carapace","Metal",1,"Basic","Action","Self","","",1,"","+1 AC while the aura is on."],
+ ["Shard Strike","Metal",1,"Basic","Action","15 ft cone","1d6 slashing","1d6",1,"Dex save half","Shards also bleed (same damage next turn)."],
+ ["Magnetic Field","Metal",2,"Stance","Free with aura","Aura","","",1,"","Attract or repel metal; slows creatures in metal armor."],
+ ["Plate in Treasure","Metal",2,"Basic","Action","Touch","","",1,"","Coat an object in silver, cold iron or adamantine."],
+ ["Consume Power","Metal",3,"Basic","Reaction","Self","","",1,"","Resist acid, lightning, fire or thunder damage; power up your next metal impulse."],
+ ["Scrap Barricade","Metal",3,"Complex","Action + bonus action","30 ft wall","","",1,"","Concentration. A wall of scrap that collapses on attackers."],
+ ["Conductive Sphere","Metal",4,"Basic","Action","30 ft","1d12 lightning","1d12",1,"Dex save half (bonus action arc)","Concentration. Allies near it resist lightning and add lightning to metal weapon hits."],
+ ["Retch Rust","Metal",4,"Surge","Action","30 ft cone","4d10 slashing","1d10",1,"Con save half","Metal-armored creatures keep taking damage."],
+ ["Rain of Razors","Metal",6,"Complex","Action + bonus action","60 ft, 20 ft radius","9d6 slashing","1d6",1,"Dex save half","The ground stays hazardous."],
+ ["Shattershields","Metal",6,"Stance","Free with aura","Aura","","",1,"","+1 AC to you and allies; plates block hits."],
+ ["Alloy Flesh and Steel","Metal",7,"Basic","Action","Self","","",1,"","Concentration. Resist physical damage, bigger metal blasts."],
+ ["Beasts of Slumbering Steel","Metal",9,"Basic","Action","30 ft","","",1,"","Summon metal mounts."],
+ ["Hell of 1,000,000 Needles","Metal",9,"Complex","Action + bonus action","500 ft, 30 ft cube","13d6 piercing","",1,"Dex save half, restrained on a fail","Concentration. Impaled creatures can be shocked each turn."],
+ ["Deflecting Wave","Water",1,"Basic","Reaction","Self","","",1,"","Reduce acid, bludgeoning, fire or slashing damage by your level (double for acid or fire)."],
+ ["Ocean's Balm","Water",1,"Basic","Action","Touch","1d8 healing","1d8",1,"","Heal and give fire resistance for 1 minute."],
+ ["Tidal Hands","Water",1,"Surge","Action","15 ft cones","1d8 bludgeoning","1d8",1,"Str save half, pushed on a fail","Pushes creatures back."],
+ ["Winter's Clutch","Water",1,"Basic","Action","60 ft, 10 ft radius","2d4 cold","1d4",1,"Dex save half","Leaves snow as difficult terrain."],
+ ["Return to the Sea","Water",2,"Basic","Action","30 ft","","",1,"","Swim speed and water breathing."],
+ ["Winter Sleet","Water",2,"Stance","Free with aura","Aura","","",1,"Dex save","Icy ground: enemies may fall prone."],
+ ["Driving Rain","Water",3,"Complex","Action + bonus action","120 ft, 15 ft radius","3d8 bludgeoning","1d8",1,"Dex save half","Heavily obscured until your next turn."],
+ ["Torrent in the Blood","Water",3,"Surge","Action","30 ft cone","3d8 healing","1d8",1,"","Heal chosen creatures; they may end poison or disease."],
+ ["Call the Hurricane","Water",4,"Complex","Action + bonus action","20 ft emanation","6d8 bludgeoning","1d8",1,"Str save half, pushed 20 ft on a fail","Bigger area while standing in water."],
+ ["Impenetrable Fog","Water",4,"Surge","Action","120 ft, 10 ft radius","","",1,"","Concentration. Heavy fog that slows everyone but you."],
+ ["Glacial Prison","Water",6,"Surge","Action","120 ft","","",1,"Con save","Freeze a creature solid until your next turn."],
+ ["Sea Glass Guardians","Water",6,"Stance","Free with aura","Aura","","",1,"","+1 AC and saves; emergency healing."],
+ ["Barrier of Boreal Frost","Water",7,"Complex","Action + bonus action","60 ft wall","10d6 cold","1d6",1,"Dex save half","Concentration. A wall of ice."],
+ ["Ride the Tsunami","Water",9,"Complex","Action + bonus action","60 ft cone","10d10 bludgeoning","",1,"Str save half, pushed 40 ft","A giant wave you ride."],
+ ["Usurp the Lunar Reins","Water",9,"Complex","Action + bonus action","500 ft","","",1,"","Concentration. Control water over a huge area."],
+ ["Fresh Produce","Wood",1,"Basic","Action","10 ft","1d8 healing","1d8",1,"","A fruit that heals (plus Con) when eaten as a bonus action."],
+ ["Hail of Splinters","Wood",1,"Surge","Action","30 ft cone","1d6 piercing","1d6",1,"Dex save half","Splinters also bleed."],
+ ["Hardwood Armor","Wood",1,"Basic","Action","Self","","",1,"","AC 13 + Dex (max 2), 16 at 4th; a wooden shield for +2; temp HP each turn."],
+ ["Timber Sentinel","Wood",1,"Basic","Action","30 ft","","",1,"","Concentration. A tree that takes hits for nearby allies."],
+ ["Ravel of Thorns","Wood",2,"Stance","Free with aura","Aura","","",1,"","Enemies in the aura are slowed and hurt as they move."],
+ ["Tumbling Lumber","Wood",2,"Basic","Action","30 ft line","2d8 bludgeoning","1d8",1,"Dex save half, prone on a fail","Logs roll over creatures and push them aside."],
+ ["Dash of Herbs","Wood",3,"Basic","Action","30 ft","2d8 healing","1d8",1,"","Heal (plus Con) or help end a poison, disease or charm."],
+ ["Wooden Palisade","Wood",3,"Complex","Action + bonus action","30 ft wall","","",1,"","Concentration. A wooden wall."],
+ ["Drifting Pollen","Wood",4,"Stance","Free with aura","Aura","","",1,"Con save","Enemies in the aura may be poisoned and dazzled."],
+ ["Sanguivolent Roots","Wood",4,"Complex","Action + bonus action","120 ft, 15 ft radius","3d6 piercing","1d6",1,"Con save half","Concentration. Heals an ally for half the damage."],
+ ["Hedge Maze","Wood",6,"Complex","Action + bonus action","60 ft","","",1,"","A maze of thorny hedges."],
+ ["Witchwood Seed","Wood",6,"Surge","Action","Touch","5d10 piercing","1d10",2,"Con save half, restrained on a fail","Roots grow through the target."],
+ ["Orchard's Endurance","Wood",7,"Stance","Free with aura","Aura","","",1,"","Allies reduce physical damage."],
+ ["Rouse the Forest's Fury","Wood",9,"Complex","Action + bonus action","500 ft","","",1,"","Concentration. Three animated trees fight for you."],
+ ["Turn the Wheel of Seasons","Wood",9,"Complex","Action + bonus action","500 ft","","",1,"","Concentration. Each round brings a new season's effect."],
+ ["Ambush Bladderwort","Water/Wood",2,"Basic","Action","30 ft","","",1,"Dex save","A hidden trap plant that swallows a creature."],
+ ["Lava Leap","Earth/Fire",2,"Surge","Movement","Self, 10 ft radius","1d6 bludgeoning + 2d6 fire","1d6 + 1d6",1,"Dex save half","Leap, then burst; +2 AC until your next turn."],
+ ["Living Bonfire","Fire/Wood",2,"Basic","Action","30 ft","","",1,"","A bonfire that powers up wood blasts."],
+ ["Rain of Rust","Metal/Water",2,"Complex","Action + bonus action","60 ft, 10 ft radius","3d6 necrotic","1d6",1,"Con save half","Extra damage and worse Dex saves for metal targets."],
+ ["Ash Strider","Air/Fire",3,"Surge","Movement","Self","3d6 fire","1d6",1,"Dex save half","Move through creatures without opportunity attacks; attacks against you have disadvantage until your next turn."],
+ ["Desert Wind","Air/Earth",3,"Stance","Free with aura","Aura","","",1,"","Air impulses deal extra slashing; heavy obscurement."],
+ ["Elemental Artillery","Metal/Wood",3,"Complex","Action + bonus action","120 ft","3d12 piercing","1d12",2,"impulse attack","Concentration. A ballista that fires each turn."],
+ ["Jagged Berms","Earth/Wood",3,"Complex","Action + bonus action","120 ft","","",1,"","Spiked earth walls."],
+ ["Lightning Rod","Air/Metal",3,"Complex","Action + bonus action","Melee","1d12 lightning","1d12",3,"impulse attack","Impale a target; lightning attacks against it have advantage."],
+ ["Molten Wire","Fire/Metal",3,"Basic","Action","15 ft","2d6 slashing","1d6",2,"melee impulse attack, restrained","Burning wire that holds the target."],
+ ["Rising Hurricane","Air/Water",3,"Complex","Action + bonus action","120 ft, 15 ft radius","2d8 bludgeoning","1d8",2,"Con save half, lifted and dropped","Creatures fall prone unless flying."],
+ ["Roiling Mudslide","Earth/Water",3,"Basic","Action","30 ft cone","2d8 bludgeoning","1d8",1,"Str save half, pushed and muddy","Mud makes moving risky until your next turn."],
+ ["Steam Knight","Fire/Water",3,"Stance","Free with aura","Aura","","",1,"Dex save","Faster movement and scalding steam around you."],
+ ["Tree of Duality","Air/Wood",3,"Complex","Action + bonus action","60 ft","","",1,"Wis save","Concentration. Heals allies; spores confuse enemies."]
+];
+function impCat(name){ return IMPULSES.find(x=>x[0].toLowerCase()===String(name||"").toLowerCase()) }
+function scaleMulti(up,n){ return String(up||"").split("+").map(t=>scaleDice(t.trim(),n)).filter(Boolean).join(" + ") }
+/* Impulse damage at the current impulse level (+ Con for the Fire impulse junction) */
+function impulseDmg(x){
+  if(!x.base) return x.dmg;
+  const k=S.kin, steps=Math.max(0,Math.floor(((Number(k.ilvl)||1)-x.lvl)/(Number(x.every)||1)));
+  let d=x.base; if(steps&&x.up){ const u=scaleMulti(x.up,steps); if(u) d+=` + ${u}`; }
+  d=d.replace(/(\d+)d(\d+)([^+]*?)\s*\+\s*(\d+)d\2\b/g,(m,a,dd,mid,b)=>`${Number(a)+Number(b)}d${dd}${mid}`); // 1d6 fire + 4d6 -> 5d6 fire
+  if(k.junction&&String(x.el).toLowerCase()===String(k.junction).toLowerCase()&&!/healing/i.test(d)){ const cm=mod(S.abil[k.abil||"con"]); d=d.replace(/^(\d+d\d+)/,`$1+${cm}`); }
+  return d+(x.save?`, ${x.save}`:"");
+}
+function impulsesAllowed(){ const k=S.kin; return kinTable(totalLevel()).known+Number(k.bonusKnown||0) }
+function impulsePickerModal(filterLvl){
+  const k=S.kin, els=(k.elements||[]).map(e=>e.toLowerCase());
+  const known=new Set(k.impulses.map(x=>x.name.toLowerCase()));
+  const fits=x=>x[1].toLowerCase().split("/").every(e=>els.includes(e));
+  const list=IMPULSES.filter(x=>fits(x)&&x[2]<=(Number(k.ilvl)||1)&&!known.has(x[0].toLowerCase()));
+  const byL={}; list.forEach(x=>(byL[x[2]]??=[]).push(x));
+  modal(`<h2>Learn an impulse</h2><p class="muted small">You know ${k.impulses.length} of ${impulsesAllowed()}. Showing ${esc((k.elements||[]).join(" and ")||"your elements")} impulses up to ${ORD[Number(k.ilvl)||1]} level you don’t know yet.</p>
+    ${Object.keys(byL).sort((a,b)=>a-b).map(l=>`<h3>${ORD[l]} level</h3>${byL[l].map(x=>`<button class="btn" data-a="impLearn" data-k="${esc(x[0])}"><strong>${esc(x[0])}</strong> <span class="tag ${elClass(x[1])}" style="min-height:0">${esc(x[1])}</span> <span class="tag ty-${x[3]}" style="min-height:0">${x[3]}</span><br><span class="small muted">${esc([x[4],x[5],x[6]].filter(Boolean).join(" · "))} — ${esc(x[10])}</span></button>`).join("")}`).join("")||`<p class="muted">Nothing new to learn at this level.</p>`}
+    ${(k.elements||[]).length?"":`<p class="small muted">Set your elements on the Impulses tab first.</p>`}`);
+}
+function learnImpulse(name){
+  const x=impCat(name); if(!x) return;
+  S.kin.impulses.push({name:x[0],el:x[1],lvl:x[2],type:x[3],act:x[4],range:x[5],base:x[6],up:x[7],every:x[8],save:x[9],dmg:"",text:x[10],c:/concentration/i.test(x[10])});
+  closeModal(); save(); render(); toast(`Learned ${x[0]}.`);
+}
+/* ---------- conditions that change rolls ----------
+   kind: attack | check | save; ab: ability for checks and saves */
+function condMode(kind,ab){
+  const c=new Set(S.conditions||[]), ex=Number(S.exhaustion||0), adv=[], dis=[];
+  if(kind==="attack"){ ["Blinded","Frightened","Poisoned","Prone","Restrained"].forEach(n=>c.has(n)&&dis.push(n)); if(c.has("Invisible")) adv.push("Invisible"); if(ex>=3) dis.push("Exhaustion"); }
+  if(kind==="check"){ ["Frightened","Poisoned"].forEach(n=>c.has(n)&&dis.push(n)); if(ex>=1) dis.push("Exhaustion"); }
+  if(kind==="save"){ if(ab==="dex"&&c.has("Restrained")) dis.push("Restrained"); if(ex>=3) dis.push("Exhaustion"); }
+  const m=rollMode(); if(m==="adv") adv.push("your choice"); if(m==="dis") dis.push("your choice");
+  return {mode:adv.length&&dis.length?"normal":adv.length?"adv":dis.length?"dis":"normal",why:[...adv.map(x=>"+"+x),...dis.map(x=>"−"+x)].join(", ")};
+}
+function d20For(kind,ab){ const cm=condMode(kind,ab), r=d20(cm.mode); if(cm.why&&!/your choice$/.test(cm.why)) r.txt+=` (${cm.why.replace(/[+−]/g,"")})`; return r; }
+/* ---------- free dice roller ---------- */
+function diceModal(){
+  modal(`<h2>Roll dice</h2><input class="in" id="diceExpr" placeholder="e.g. 3d6+2 or 1d20+5" style="margin-bottom:8px;font-size:20px">
+    <div class="chips" style="margin-bottom:8px">${[4,6,8,10,12,20,100].map(d=>`<button class="chip" data-a="diceAdd" data-k="${d}">d${d}</button>`).join("")}<button class="chip" data-a="diceAdd" data-k="+1">+1</button><button class="chip" data-a="diceAdd" data-k="-1">−1</button><button class="chip" data-a="diceAdd" data-k="clear">Clear</button></div>
+    <button class="btn pri" data-a="diceRoll" style="text-align:center">Roll</button>`);
+  setTimeout(()=>document.getElementById("diceExpr")?.focus(),50);
+}
+function diceAdd(k){
+  const inp=document.getElementById("diceExpr"); let e=inp.value.trim();
+  if(k==="clear"){ inp.value=""; return; }
+  if(k==="+1"||k==="-1"){ const m=e.match(/([+-]\s*\d+)\s*$/); const cur=m?Number(m[1].replace(/\s/g,"")):0, n=cur+Number(k); e=(m?e.slice(0,m.index):e).trim(); inp.value=e+(n?(n>0?"+":"-")+Math.abs(n):""); return; }
+  const re=new RegExp(`(\\d*)d${k}(?!\\d)`); const m=e.match(re);
+  inp.value=m?e.replace(re,`${Number(m[1]||1)+1}d${k}`):(e?`${e}+1d${k}`:`1d${k}`);
+}
+function rollExpr(e){
+  const {dice,flat}=parseDice(e); if(!dice.length&&!flat) return null;
+  let total=flat; const parts=[];
+  dice.forEach(t=>{ if(t.d===20&&t.n===1&&rollMode()!=="normal"){ const r=d20(); total+=t.neg?-r.n:r.n; parts.push(`d20 (${r.txt})`); return; }
+    const rs=Array.from({length:t.n},()=>roll(t.d)); const sum=rs.reduce((a,b)=>a+b,0); total+=t.neg?-sum:sum; parts.push(`${t.neg?"−":""}${t.n}d${t.d} (${rs.join(", ")})`); });
+  if(flat) parts.push(sgn(flat));
+  return {total,txt:parts.join(" ")};
+}
+/* ---------- potions ---------- */
+const POTIONS=[[/supreme healing/i,"10d4+20"],[/superior healing/i,"8d4+8"],[/greater healing/i,"4d4+4"],[/potion of healing/i,"2d4+2"]];
+function itemHeal(it){ const p=POTIONS.find(([re])=>re.test(it.name||"")); if(p) return p[1]; const m=String(it.note||"").match(/heals?\s+(\d+d\d+(?:\s*[+-]\s*\d+)?)/i); return m?m[1].replace(/\s/g,""):""; }
+function drinkItem(i){
+  const it=S.items[i], h=itemHeal(it); if(!h||Number(it.qty)<=0) return;
+  const r=rollDamage(h)||{total:0,txt:h}; it.qty=Number(it.qty)-1;
+  if(S.hp.cur===0) S.death={s:0,f:0};
+  const before=S.hp.cur; S.hp.cur=Math.min(S.hp.max,S.hp.cur+r.total);
+  spend("action"); save(); render();
+  showRoll(it.name,[{label:"Healing",big:String(r.total),sub:r.txt},{label:"HP",big:`${S.hp.cur}`,sub:`was ${before}, max ${S.hp.max}`}],`${it.qty} left.`);
+}
+/* ---------- Arcane Recovery on a short rest ---------- */
+function wizardLevel(){ const h=S.hd.find(h=>/wizard/i.test(h.cls||"")); if(h) return h.total; return Number(S.sources?.wizard?.level||S.wizLevel||0) }
+let arcaneLeft=0;
+function arcaneHtml(){
+  const f=S.features.find(f=>/arcane recovery/i.test(f.name)); if(!f) return "";
+  if(f.used>=f.max&&!arcaneLeft) return `<p class="small muted">Arcane Recovery already used today.</p>`;
+  if(!arcaneLeft) return `<button class="btn gold" data-a="arcaneStart" style="text-align:center">Arcane Recovery: get back ${Math.ceil(wizardLevel()/2)} levels of spell slots</button>`;
+  const lv=[1,2,3,4,5].filter(l=>S.slots[l].used>0&&l<=arcaneLeft);
+  return `<div class="card" style="padding:10px;margin:8px 0"><strong>Arcane Recovery: ${arcaneLeft} level${arcaneLeft>1?"s":""} left</strong>
+    <div class="obtns">${lv.map(l=>`<button class="btn sm pri" data-a="arcanePick" data-k="${l}">+1 ${ORD[l]} slot</button>`).join("")||`<span class="muted small">No used slots that fit.</span>`}<button class="btn sm" data-a="arcaneDone">Done</button></div></div>`;
+}
+/* ---------- quests, NPCs, sessions ---------- */
+let notesSearch="";
+function noteHit(...xs){ const q=notesSearch.trim().toLowerCase(); return !q||xs.join(" ").toLowerCase().includes(q) }
+/* ---------- portrait ---------- */
+function setPortrait(file){
+  if(!file) return; const fr=new FileReader();
+  fr.onload=()=>{ const img=new Image(); img.onload=()=>{ const c=document.createElement("canvas"), z=256, sc=Math.max(z/img.width,z/img.height); c.width=c.height=z; const g=c.getContext("2d");
+      g.drawImage(img,(z-img.width*sc)/2,(z-img.height*sc)/2,img.width*sc,img.height*sc); S.portrait=c.toDataURL("image/jpeg",0.8); save(); render(); toast("Picture saved."); }; img.src=fr.result; };
+  fr.readAsDataURL(file);
+}
+/* ---------- printable sheet ---------- */
+function printSheet(){
+  const sk=SKILLS.filter(([k])=>S.skills[k]).map(([k,l,a])=>`${l} ${sgn(mod(S.abil[a])+S.prof*S.skills[k])}`).join(", ");
+  const byL={}; S.spells.forEach(sp=>(byL[sp.lvl]??=[]).push(sp));
+  const html=`<div class="ps">
+    <div class="ps-hd">${S.portrait?`<img src="${S.portrait}" alt="">`:""}<div><h1>${esc(S.name)}</h1><p>${esc([S.race,S.classes,S.background,S.alignment].filter(Boolean).join(" · "))}</p></div></div>
+    <div class="ps-row">${[["HP",S.hp.max],["AC",S.ac],["Speed",S.speed],["Init",sgn(mod(S.abil.dex)+Number(S.initMisc||0))],["Prof",`+${S.prof}`],["Passive Perception",10+mod(S.abil.wis)+S.prof*(S.skills.perception||0)]].map(([l,v])=>`<div><b>${esc(v)}</b><span>${l}</span></div>`).join("")}</div>
+    <div class="ps-row">${ABILS.map(([k,l])=>`<div><b>${sgn(mod(S.abil[k]))}</b><span>${l} ${S.abil[k]}${S.saves[k]?" · save "+sgn(mod(S.abil[k])+S.prof):""}</span></div>`).join("")}</div>
+    <p><strong>Skills:</strong> ${esc(sk||"none")}</p>
+    <h2>Attacks</h2>${S.attacks.map(a=>`<p><strong>${esc(a.name)}</strong> ${esc(a.bonus)} · ${esc(a.dmg)}${a.note?` <em>${esc(a.note)}</em>`:""}</p>`).join("")||"<p>None</p>"}
+    ${S.kin?`<h2>Impulses (DC ${kinStats().dc})</h2>${S.kin.impulses.map(x=>`<p><strong>${esc(x.name)}</strong> (${esc(x.el)} ${ORD[x.lvl]||x.lvl}, ${esc(x.type)}) ${esc([x.act,x.range,x.dmg].filter(Boolean).join(" · "))}</p>`).join("")}`:""}
+    ${S.spells.length?`<h2>Spells</h2>${Object.keys(byL).sort((a,b)=>a-b).map(l=>`<p><strong>${l==0?"Cantrips":ORD[l]+" level"}${l>0&&S.slots[l]?.max?` (${S.slots[l].max} slots)`:""}:</strong> ${byL[l].map(sp=>esc(sp.name)+(sp.dmg?` (${esc(sp.dmg)})`:"")).join(", ")}</p>`).join("")}${S.pact.max?`<p><strong>Pact slots:</strong> ${S.pact.max} × ${ORD[S.pact.level]} level</p>`:""}`:""}
+    <h2>Features</h2>${S.features.map(f=>`<p><strong>${esc(f.name)}</strong>${isLimited(f)?` (${f.max}/${f.reset==="short"?"short rest":"long rest"})`:""}: ${esc(f.text)}</p>`).join("")}
+    <h2>Equipment</h2><p>${S.items.map(it=>`${esc(it.name)}${Number(it.qty)>1?` ×${it.qty}`:""}`).join(", ")||"None"} · ${["pp","gp","ep","sp","cp"].filter(k=>Number(S.coins[k])).map(k=>`${fmt(S.coins[k])} ${k}`).join(", ")}</p>
+    <h2>Proficiencies</h2><p style="white-space:pre-line">${esc(S.profText)}</p></div>`;
+  document.getElementById("printRoot").innerHTML=html;
+  setTimeout(()=>window.print(),50);
 }
 /* ---------- shared initiative (stored in the town, so the GM sees it) ---------- */
 function syncInit(){
@@ -666,7 +925,7 @@ function checkMod(kind,k){
   const sk=SKILLS.find(s=>s[0]===k); return mod(S.abil[sk[2]])+S.prof*(S.skills[k]||0);
 }
 function rollCheck(kind,k){
-  const m=checkMod(kind,k), r=d20();
+  const m=checkMod(kind,k), r=d20For(kind==="save"?"save":"check",kind==="skill"?SKILLS.find(x=>x[0]===k)[2]:k);
   const name=kind==="skill"?SKILLS.find(s=>s[0]===k)[1]:(ABILS.find(a=>a[0]===k)[1]+(kind==="save"?" save":" check"));
   showRoll(name,[{label:kind==="save"?"Saving throw":"Check",big:String(r.n+m),sub:`d20 ${r.txt} ${sgn(m)}${r.n===20?" · natural 20":r.n===1?" · natural 1":""}`,cls:r.n===20?"crit":r.n===1?"miss":""}]);
 }
@@ -687,9 +946,10 @@ function renderHeader(){
   if(!tabList().some(([k])=>k===tab)) tab="combat";
   const tabsHtml=()=>tabList().map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" data-a="tab" data-k="${k}">${l}</button>`).join("");
   document.getElementById("tabs").innerHTML=tabsHtml();
-  if(!S){ document.getElementById("hName").textContent="No character"; document.getElementById("hSub").textContent="Tap to pick or start one"; document.getElementById("vitals").innerHTML=""; return; }
+  if(!S){ document.getElementById("hPic").hidden=true; document.getElementById("hName").textContent="No character"; document.getElementById("hSub").textContent="Tap to pick or start one"; document.getElementById("vitals").innerHTML=""; return; }
   document.title=(S.name||"Character")+" – Character";
   document.getElementById("hName").textContent=S.name||"Unnamed";
+  { const pic=document.getElementById("hPic"); if(S.portrait){ pic.src=S.portrait; pic.hidden=false; } else pic.hidden=true; }
   document.getElementById("hSub").textContent=[S.race,S.classes].filter(Boolean).join(", ");
   const conc=S.conc?`<button class="vit conc" data-a="dropConc" title="Tap to drop concentration"><b>${esc(S.conc)}</b><span>Concentrating · tap to end</span></button>`:"";
   document.getElementById("vitals").innerHTML=`
@@ -798,7 +1058,7 @@ function kinBar(){
 function rollModeChips(){ const m=rollMode(); return `<div class="chips" style="margin-bottom:10px">${[["normal","Normal roll"],["adv","Advantage"],["dis","Disadvantage"]].map(([k,l])=>`<button class="chip ${m===k?"on":""}" style="${m===k?"background:var(--hexSoft);color:var(--hex);border-color:var(--hex)":""}" data-a="rollMode" data-k="${k}">${l}</button>`).join("")}</div>`; }
 function startCombat(){
   S.combat={on:true,round:1,action:false,bonus:false,reaction:false,move:speedNow(),atk:0};
-  const im=mod(S.abil.dex)+Number(S.initMisc||0), r=d20(); S.combat.init=r.n+im;
+  const im=mod(S.abil.dex)+Number(S.initMisc||0), r=d20For("check","dex"); S.combat.init=r.n+im;
   if(S.combats) S.combats=null;
   syncInit(); // older versions kept a history of past combats; cleared (null syncs, a deleted key would come back)
   save(); render();
@@ -952,7 +1212,8 @@ function renderSpells(){
 ${S.pact.max>0?`      <div class="slotrow"><span class="lv" style="color:var(--violet)">Pact</span>
         <div class="pips" style="flex:1">${Array.from({length:S.pact.max},(_,j)=>`<button class="pip pact ${j<S.pact.max-S.pact.used?"":"used"}" data-a="pactSlot" data-j="${j}" aria-label="Pact slot"></button>`).join("")}</div>
         <span class="muted small">${ORD[S.pact.level]} level · short rest</span></div>`:""}
-      <details style="margin-top:10px"><summary class="muted small">Change slot totals</summary>
+      ${S.hd.some(h=>h.caster&&h.caster!=="none")?`<p class="small muted" style="margin:8px 0 0"><label><input type="checkbox" data-a="autoSlots" ${autoSlots()?"checked":""}> Work out slots from my classes</label>${autoSlots()?` (caster level ${casterLevel()}${S.pact.max?`, warlock ${S.hd.filter(h=>h.caster==="pact").reduce((a,h)=>a+h.total,0)}`:""})`:""}</p>`:`<p class="small muted" style="margin:8px 0 0">Tip: set each class’s spellcasting on the Character tab (Hit dice) and slots are worked out for you.</p>`}
+      <details style="margin-top:10px" ${autoSlots()?"hidden":""}><summary class="muted small">Change slot totals</summary>
         <div class="row small" style="margin-top:8px">${[1,2,3,4,5,6,7,8,9].map(l=>`<label class="muted">${ORD[l]} <input class="in num" type="number" min="0" style="width:56px" data-b="slots.${l}.max" value="${S.slots[l].max}"></label>`).join("")}</div>
         <div class="row small" style="margin-top:8px"><label class="muted">Pact slots <input class="in num" type="number" min="0" style="width:56px" data-b="pact.max" value="${S.pact.max}"></label>
         <label class="muted">Pact slot level <input class="in num" type="number" min="1" max="5" style="width:56px" data-b="pact.level" value="${S.pact.level}"></label></div>
@@ -1034,7 +1295,10 @@ function renderImpulses(){
     </section>
   </div>
   <section class="card" style="margin-top:16px">
-    <h2>Impulses <button class="btn sm" data-a="add" data-k="kin.impulses">Add impulse</button></h2>
+    <h2>Impulses <span class="row"><span class="muted small" style="font-family:var(--body);font-weight:400">${k.impulses.length} of ${impulsesAllowed()} known</span><button class="btn sm pri" data-a="impPick">Learn impulse</button><button class="btn sm" data-a="add" data-k="kin.impulses">Add your own</button></span></h2>
+    <div class="row small muted" style="margin-bottom:8px"><label>Elements <input class="in" data-a-change="kinEls" value="${esc((k.elements||[]).join(", "))}" placeholder="Fire, Air" style="width:160px"></label>
+      <label>Impulse junction <select class="in" data-b="kin.junction" style="width:auto"><option value="">None</option>${["Fire","Air","Earth","Metal","Water","Wood"].map(e=>`<option ${k.junction===e?"selected":""}>${e}</option>`).join("")}</select></label>
+      <label>Extra known (Second Gate…) <input class="in num" type="number" min="0" data-b="kin.bonusKnown" value="${k.bonusKnown||0}" style="width:56px"></label></div>
     <div class="chips small" style="margin-bottom:4px">${IMP_TYPES.map(t=>`<span class="tag ty-${t}" style="min-height:0">${t}: ${IMP_TYPE_HELP[t]}</span>`).join("")}</div>
     ${Object.keys(byLvl).sort((a,b)=>a-b).map(l=>`<div class="lvlhd">${ORD[l]||l} level</div>
       ${byLvl[l].map(x=>`<div class="imp ${x.type==="Stance"&&k.stance===x.name&&k.aura?"stance-on":""}">
@@ -1106,11 +1370,14 @@ function renderCharacter(){
     <p class="muted small">Tap a circle: proficient, then expertise, then none. Tap a number to roll it.</p>
   </section>
   <section class="card">
-    <h2>Identity</h2>
+    <h2>Identity <button class="btn sm" data-a="print">Print / PDF</button></h2>
+    <div class="row" style="margin-bottom:10px">${S.portrait?`<img class="portrait big" src="${S.portrait}" alt="Character picture">`:`<div class="portrait big empty" aria-hidden="true">?</div>`}
+      <label class="btn sm">Choose picture<input type="file" accept="image/*" id="portraitFile" hidden></label>${S.portrait?`<button class="btn sm ghost" data-a="portraitDel">Remove</button>`:""}</div>
     ${[["name","Name"],["race","Race"],["classes","Class & level"],["background","Background"],["alignment","Alignment"]].map(([k,l])=>`<label class="small muted">${l}<input class="in" data-b="${k}" value="${esc(S[k])}" style="margin:2px 0 8px;color:var(--ink)"></label>`).join("")}
     <div class="row small muted"><label>Speed <input class="in num" type="number" data-b="speed" value="${S.speed}"></label><label>Extra initiative <input class="in num" type="number" data-b="initMisc" value="${S.initMisc}"></label></div>
     <h3>Hit dice</h3>
-    ${S.hd.map((h,i)=>`<div class="row small muted" style="margin-bottom:6px"><label>Die d<input class="in num" type="number" data-b="hd.${i}.die" value="${h.die}" style="width:56px"></label><label>Count <input class="in num" type="number" data-b="hd.${i}.total" value="${h.total}" style="width:56px"></label></div>`).join("")}
+    ${S.hd.map((h,i)=>`<div class="row small muted" style="margin-bottom:8px"><input class="in" data-b="hd.${i}.cls" value="${esc(h.cls||"")}" placeholder="Class" style="width:120px" aria-label="Class name"><label>Level <input class="in num" type="number" data-b="hd.${i}.total" value="${h.total}" style="width:56px"></label><label>d<input class="in num" type="number" data-b="hd.${i}.die" value="${h.die}" style="width:56px"></label>
+      <select class="in" data-b="hd.${i}.caster" style="width:auto" aria-label="Spellcasting">${CASTER_TYPES.map(([v,l])=>`<option value="${v}" ${(h.caster||"none")===v?"selected":""}>${l}</option>`).join("")}</select></div>`).join("")}
   </section>
   <section class="card">
     <h2>Proficiencies &amp; languages</h2>
@@ -1134,8 +1401,10 @@ function renderInventory(){
       <input class="in num" type="number" min="0" data-b="items.${i}.qty" value="${it.qty}" style="width:60px" aria-label="Quantity">
       <input class="in" data-b="items.${i}.name" value="${esc(it.name)}" style="flex:2;font-weight:600" aria-label="Item">
       <input class="in" data-b="items.${i}.note" value="${esc(it.note)}" placeholder="Notes" style="flex:3" aria-label="Notes">
+      ${itemHeal(it)?`<button class="btn sm pri" data-a="drink" data-i="${i}" ${Number(it.qty)>0?"":"disabled"} title="Heals ${esc(itemHeal(it))}">Drink</button>`:""}
       <button class="tag ${it.attune?"on":""}" data-a="attune" data-i="${i}" title="Attuned">Attuned</button>
       <button class="x" data-a="del" data-k="items" data-i="${i}" aria-label="Remove">×</button></div>`).join(""):`<p class="muted">Nothing carried yet. Add your first item.</p>`}
+    <p class="muted small">Healing potions get a Drink button (it rolls the healing). For anything else that heals, write “heals 2d4+2” in its notes.</p>
   </section></div>`;
 }
 
@@ -1203,8 +1472,29 @@ function renderTown(){
 
 /* ---------- notes ---------- */
 function renderNotes(){
-  return `<div class="grid"><section class="card" style="grid-column:1/-1"><h2>Session notes</h2>
-  <textarea class="in" data-b="notes" style="min-height:50vh" placeholder="NPCs, quests, loot, things your DM said that might matter later…">${esc(S.notes)}</textarea></section>
+  const Q=(S.quests||[]).map((x,i)=>({...x,i})), N=(S.npcs||[]).map((x,i)=>({...x,i})), SS=(S.sessions||[]).map((x,i)=>({...x,i}));
+  return `<section class="card" style="margin-bottom:16px"><div class="row"><input class="in" id="notesSearch" type="search" value="${esc(notesSearch)}" placeholder="Search sessions, quests and NPCs" style="flex:1" aria-label="Search notes"></div></section>
+  <div class="grid">
+  <section class="card"><h2>Sessions <button class="btn sm pri" data-a="sessionAdd">New session</button></h2>
+    ${SS.slice().reverse().filter(x=>noteHit(x.title,x.loot,x.notes)).map(x=>`<details class="note-entry" ${x.i===SS.length-1?"open":""}><summary><strong>${esc(x.title||"Session")}</strong> <span class="muted small">${esc(x.date||"")}</span></summary>
+      <label class="small muted">Title<input class="in" data-b="sessions.${x.i}.title" value="${esc(x.title)}"></label>
+      <div class="row small muted"><label>Date <input class="in" type="date" data-b="sessions.${x.i}.date" value="${esc(x.date)}"></label><label>XP <input class="in num" type="number" data-b="sessions.${x.i}.xp" value="${x.xp||0}"></label></div>
+      <label class="small muted">Loot<input class="in" data-b="sessions.${x.i}.loot" value="${esc(x.loot)}"></label>
+      <label class="small muted">What happened<textarea class="in" data-b="sessions.${x.i}.notes" rows="4">${esc(x.notes)}</textarea></label>
+      <button class="btn sm ghost" data-a="del" data-k="sessions" data-i="${x.i}">Remove session</button></details>`).join("")||`<p class="muted">One entry per game night: what happened, loot, XP.</p>`}
+    ${SS.length?`<p class="small muted">Total XP: ${fmt(SS.reduce((a,x)=>a+Number(x.xp||0),0))}</p>`:""}
+  </section>
+  <section class="card"><h2>Quests <button class="btn sm" data-a="questAdd">Add</button></h2>
+    ${["open","done"].map(st=>{ const l=Q.filter(x=>(x.status||"open")===st&&noteHit(x.title,x.note)); return l.length?`<h3>${st==="open"?"Open":"Done"}</h3>${l.map(x=>`<div class="quest ${st}"><button class="dot ${st==="done"?"on":""}" data-a="questToggle" data-i="${x.i}" aria-label="Mark ${st==="done"?"open":"done"}"></button>
+      <div style="flex:1"><input class="in bare" data-b="quests.${x.i}.title" value="${esc(x.title)}" style="font-weight:700"><input class="in bare small muted" data-b="quests.${x.i}.note" value="${esc(x.note)}" placeholder="Details, who gave it, reward"></div>
+      <button class="x" data-a="del" data-k="quests" data-i="${x.i}" aria-label="Remove">×</button></div>`).join("")}`:""; }).join("")||`<p class="muted">Track what the party is working on. Tap the circle when it’s done.</p>`}
+  </section>
+  <section class="card"><h2>NPCs <button class="btn sm" data-a="npcAdd">Add</button></h2>
+    ${N.filter(x=>noteHit(x.name,x.where,x.note)).map(x=>`<div class="npc"><div class="row" style="flex-wrap:nowrap"><input class="in bare" data-b="npcs.${x.i}.name" value="${esc(x.name)}" style="font-weight:700;flex:1"><button class="x" data-a="del" data-k="npcs" data-i="${x.i}" aria-label="Remove">×</button></div>
+      <input class="in bare small" data-b="npcs.${x.i}.where" value="${esc(x.where)}" placeholder="Where, who they are"><textarea class="in bare small muted" data-b="npcs.${x.i}.note" rows="2" style="min-height:0" placeholder="What you know about them">${esc(x.note)}</textarea></div>`).join("")||`<p class="muted">People you meet: where they are and what you know.</p>`}
+  </section>
+  <section class="card" style="grid-column:1/-1"><h2>Other notes</h2>
+  <textarea class="in" data-b="notes" style="min-height:30vh" placeholder="Anything else…">${esc(S.notes)}</textarea></section>
   </div>`;
 }
 
@@ -1232,6 +1522,8 @@ function doRest(kind){
     modal(`<h2>Short rest</h2><p class="muted">Pact slots and short-rest features are back. Spend hit dice to heal (adds your Con modifier ${sgn(mod(S.abil.con))}).</p>
       <p><strong>HP ${S.hp.cur} / ${S.hp.max}</strong></p>
       ${dice.length?dice.map(h=>`<button class="btn pri" data-a="spendHD" data-i="${h.i}">Roll a d${h.die} (${h.total-h.used} left)</button>`).join(""):`<p class="muted">No hit dice left.</p>`}
+      ${S.pact.max?`<p class="small muted">Pact slots: ${S.pact.max} of ${S.pact.max} back.</p>`:""}
+      ${arcaneHtml()}
       <button class="btn" data-a="closeModal" style="text-align:center">Done</button>`);
   } else {
     S.hp.cur=S.hp.max; S.hp.temp=0; S.death={s:0,f:0}; S.pact.used=0;
@@ -1240,7 +1532,7 @@ function doRest(kind){
     let regain=Math.max(1,Math.floor(totalLevel()/2));
     S.hd.slice().sort((a,b)=>b.die-a.die).forEach(h=>{const r=Math.min(h.used,regain);h.used-=r;regain-=r});
     if(S.exhaustion>0)S.exhaustion--;
-    S.conc=""; S.shield=false; S.bladesong=false; S.riders=[]; S.marks={}; S.effects=[]; if(S.combat) S.combat.on=false; if(S.kin) S.kin.aura=false;
+    S.conc=""; S.shield=false; S.bladesong=false; S.riders=[]; S.marks={}; S.effects=[]; S.agathys=0; arcaneLeft=0; if(S.combat) S.combat.on=false; if(S.kin) S.kin.aura=false;
     toast("Long rest done: HP, slots and features restored. You can change prepared spells and use Cantrip Formulas now.",4500);
   }
   save(); render();
@@ -1276,11 +1568,12 @@ document.addEventListener("click",e=>{
     case "spendHD": { const h=S.hd[i]; if(h.total-h.used<=0) return; const r=roll(h.die), heal=Math.max(0,r+mod(S.abil.con)); h.used++; S.hp.cur=Math.min(S.hp.max,S.hp.cur+heal); save(); doRest("short"); toast(`Rolled ${r} on the d${h.die}: healed ${heal}.`); return; }
     case "hp": {
       const inp=document.getElementById("hpAmt"); const n=Math.max(0,Math.floor(Number(inp.value)||0)); if(!n&&k!=="temp"){inp.focus();return;}
-      if(k==="dmg"){ let d=n; const t=Math.min(S.hp.temp,d); S.hp.temp-=t; d-=t; S.hp.cur=Math.max(0,S.hp.cur-d);
+      if(k==="dmg"){ let d=n; const hadTemp=S.hp.temp>0; const t=Math.min(S.hp.temp,d); S.hp.temp-=t; d-=t; S.hp.cur=Math.max(0,S.hp.cur-d);
+        if(S.agathys&&hadTemp){ toast(`Armor of Agathys: if that was a melee hit, the attacker takes ${S.agathys} cold damage.${S.hp.temp?"":" The armor is gone now."}`,5000); if(!S.hp.temp) S.agathys=0; }
         if(S.conc&&S.hp.cur>0) concentrationCheck(n); else if(S.conc) dropConcentration();
         if(S.hp.cur===0) toast("You’re down. Death saves are showing.",3500); }
       else if(k==="heal"){ if(S.hp.cur===0)S.death={s:0,f:0}; S.hp.cur=Math.min(S.hp.max,S.hp.cur+n); }
-      else S.hp.temp=n;
+      else { S.hp.temp=n; if(!n) S.agathys=0; }
       save(); render(); return; }
     case "death": { const cur=S.death[k]; S.death[k]=cur>i?i:i+1; save(); render(); return; }
     case "toggleShield": S.shield=!S.shield; save(); render(); return;
@@ -1294,6 +1587,22 @@ document.addEventListener("click",e=>{
       toast(`Bladesong (1 minute): AC +${bsBonus()}, speed +10 ft, advantage on Acrobatics, +${bsBonus()} on concentration saves. Ends with medium or heavy armor, a shield, or a two-handed attack.`,6000); return; }
     case "combatStart": startCombat(); return;
     case "rollMode": S.rollMode=k; save(); render(); return;
+    case "autoSlots": S.autoSlots=autoSlots()?false:true; save(); render(); return;
+    case "impPick": impulsePickerModal(); return;
+    case "impLearn": learnImpulse(k); return;
+    case "drink": drinkItem(i); return;
+    case "dice": diceModal(); return;
+    case "diceAdd": diceAdd(k); return;
+    case "diceRoll": { const e=document.getElementById("diceExpr").value.trim(); const r=rollExpr(e); if(!r){ toast("Type dice like 2d6+3."); return; } showRoll(e,[{label:"Total",big:String(r.total),sub:r.txt}]); return; }
+    case "arcaneStart": { const f=S.features.find(f=>/arcane recovery/i.test(f.name)); arcaneLeft=Math.ceil(wizardLevel()/2); if(f) f.used=Math.min(f.max||1,(f.used||0)+1); save(); doRest("short"); return; }
+    case "arcanePick": { const l=Number(k); if(l>arcaneLeft||S.slots[l].used<=0) return; S.slots[l].used--; arcaneLeft-=l; save(); doRest("short"); toast(`Got back a ${ORD[l]}-level slot.`); return; }
+    case "arcaneDone": arcaneLeft=0; save(); doRest("short"); return;
+    case "sessionAdd": S.sessions=S.sessions||[]; S.sessions.push({title:`Session ${S.sessions.length+1}`,date:new Date().toISOString().slice(0,10),xp:0,loot:"",notes:""}); save(); render(); return;
+    case "questAdd": S.quests=S.quests||[]; S.quests.push({title:"New quest",note:"",status:"open"}); save(); render(); return;
+    case "questToggle": { const q=S.quests[i]; q.status=(q.status||"open")==="open"?"done":"open"; save(); render(); return; }
+    case "npcAdd": S.npcs=S.npcs||[]; S.npcs.push({name:"New NPC",where:"",note:""}); save(); render(); return;
+    case "print": printSheet(); return;
+    case "portraitDel": S.portrait=null; save(); render(); return;
     case "markToggle": { S.marks=S.marks||{}; S.marks[k]=!S.marks[k]; save(); render(); return; }
     case "atkType": { const row=curAtk&&curAtk.rows[i]; if(row){ row.type=k; paintAttack(); } return; }
     case "atkExtra": { const c=curAtk; if(!c||!c.extra||c.extraDone) return; c.extraDone=rollDamage(c.extra.dmg)||{total:0,txt:c.extra.dmg}; paintAttack(); return; }
@@ -1411,7 +1720,8 @@ document.addEventListener("click",e=>{
       if(k==="pact") S.pact.used++; else if(k!=="ritual") S.slots[k].used++;
       if(k!=="ritual") spend(castTime(s.name));
       { const lv=k==="pact"?S.pact.level:k==="ritual"?s.lvl:Number(k);
-        if(/^hex$/i.test(s.name)){ S.marks=S.marks||{}; S.marks.hex=true; spendWarn+="Target Hexed: each hit adds 1d6 necrotic. "; }
+        if(/^armor of agathys$/i.test(s.name)){ const v=5*lv; S.hp.temp=Math.max(S.hp.temp,v); S.agathys=v; spendWarn+=`Armor of Agathys: ${v} temp HP. While they last, a creature that hits you in melee takes ${v} cold damage. `; }
+        else if(/^hex$/i.test(s.name)){ S.marks=S.marks||{}; S.marks.hex=true; spendWarn+="Target Hexed: each hit adds 1d6 necrotic. "; }
         else if(isSmite(s)&&s.dmg){ addRider(s,lv); spendWarn+=`${s.name} is ready: it adds ${spellDmgAt(s,lv)} to your next melee weapon hit. `; } else rollSpell(s,lv); }
       if(s.c) S.conc=s.name;
       closeModal(); save(); render(); toast(`Cast ${s.name}${k==="ritual"?" as a ritual":k==="pact"?" with a pact slot":" at "+ORD[k]+" level"}.`); return; }
@@ -1450,6 +1760,7 @@ document.addEventListener("click",e=>{
 });
 
 document.addEventListener("input",e=>{
+  if(e.target.id==="notesSearch"){ notesSearch=e.target.value; render(); const el=document.getElementById("notesSearch"); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } return; }
   if(e.target.id==="featSearch"){ featSearch=e.target.value; render(); const el=document.getElementById("featSearch"); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } return; }
   const p=e.target.dataset?.b; if(!p) return;
   let v=e.target.value; if(e.target.type==="number") v=v===""?0:Number(v); if(e.target.type==="checkbox") v=e.target.checked;
@@ -1457,6 +1768,8 @@ document.addEventListener("input",e=>{
 });
 document.addEventListener("change",e=>{
   if(e.target.id==="importFile"){ importBackup(e.target.files[0]); return; }
+  if(e.target.id==="portraitFile"){ setPortrait(e.target.files[0]); return; }
+  if(e.target.dataset?.aChange==="kinEls"){ S.kin.elements=e.target.value.split(/[,/]/).map(x=>x.trim()).filter(Boolean).map(x=>x[0].toUpperCase()+x.slice(1).toLowerCase()); save(); render(); return; }
   if(e.target.dataset?.aChange==="switchTown"){ activeT=e.target.value; activate(); persistIds(); render(); return; }
   if(!S&&!(e.target.dataset?.b||"").startsWith("town.")) return;
   const p=e.target.dataset?.b; if(!p) return;

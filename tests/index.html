@@ -119,6 +119,56 @@ function tests(w){
   eq("Kineticist table at level 9", g("kinTable(9)"), {ilvl:5,count:2,gather:"2d6",known:7});
   eq("Kineticist table at level 11", g("[kinTable(11).count,kinTable(11).gather]"), [3,"3d6"]);
 
+  // ---- spell slots from classes ----
+  g("S.hd=[{die:8,total:3,used:0,cls:'Warlock',caster:'pact'},{die:6,total:6,used:0,cls:'Wizard',caster:'full'}]; S.autoSlots=true; render();");
+  eq("Wizard 6 + Warlock 3: slots 4/3/3", g("[S.slots[1].max,S.slots[2].max,S.slots[3].max,S.slots[4].max]"), [4,3,3,0]);
+  eq("Warlock 3: 2 pact slots at 2nd level", g("[S.pact.max,S.pact.level]"), [2,2]);
+  g("S.hd=[{die:10,total:5,cls:'Paladin',caster:'half'},{die:6,total:3,cls:'Sorcerer',caster:'full'}]; render();");
+  eq("Paladin 5 + Sorcerer 3 = caster level 5", g("casterLevel()"), 5);
+  g("S.hd=[{die:8,total:3,used:0,cls:'Warlock',caster:'pact'},{die:6,total:6,used:0,cls:'Wizard',caster:'full'}]; render();");
+
+  // ---- Armor of Agathys, Arcane Recovery ----
+  g("S.hp.temp=0; const ai=S.spells.findIndex(s=>s.name==='Armor of Agathys'); S.slots[2].used=0; document.body.insertAdjacentHTML('beforeend',`<button id='tAoA' data-a='castAt' data-i='${ai}' data-k='2'></button>`); document.getElementById('tAoA').click(); document.getElementById('tAoA').remove();");
+  eq("Armor of Agathys at 2nd level: 10 temp HP", g("[S.hp.temp,S.agathys]"), [10,10]);
+  eq("Arcane Recovery for Wizard 6 recovers 3 levels", g("Math.ceil(wizardLevel()/2)"), 3);
+
+  // ---- conditions change rolls ----
+  g("S.rollMode='normal'; S.exhaustion=0; S.conditions=['Poisoned'];");
+  eq("Poisoned: disadvantage on attacks", g("condMode('attack').mode"), "dis");
+  g("S.conditions=['Poisoned','Invisible'];");
+  eq("Poisoned + Invisible cancel out", g("condMode('attack').mode"), "normal");
+  g("S.conditions=['Restrained'];");
+  eq("Restrained: disadvantage on Dex saves only", g("[condMode('save','dex').mode,condMode('save','wis').mode]"), ["dis","normal"]);
+  g("S.conditions=[];");
+
+  // ---- potions and the dice roller ----
+  eq("Potion names give their healing", g("[itemHeal({name:'Potion of Healing'}),itemHeal({name:'Potion of Greater Healing'}),itemHeal({name:'Herbal tea',note:'heals 1d8+2'})]"), ["2d4+2","4d4+4","1d8+2"]);
+  w.Math.random=()=>0.999;
+  g("S.items=[{name:'Potion of Healing',qty:2,note:'',attune:false}]; S.hp.cur=1; drinkItem(0);");
+  eq("Drinking heals 2d4+2 (max 10) and uses one", g("[S.hp.cur,S.items[0].qty]"), [11,1]);
+  eq("Free dice roller: 2d6+3", g("rollExpr('2d6+3').total"), 15);
+  w.Math.random=()=>0.5;
+  g("diceModal(); diceAdd('6'); diceAdd('6'); diceAdd('20'); diceAdd('+1');");
+  eq("Dice buttons build an expression", g("document.getElementById('diceExpr').value"), "2d6+1d20+1");
+  g("closeModal();");
+
+  // ---- notes ----
+  g("document.body.insertAdjacentHTML('beforeend',`<button id='tSa' data-a='sessionAdd'></button><button id='tQa' data-a='questAdd'></button>`); document.getElementById('tSa').click(); document.getElementById('tQa').click(); document.getElementById('tSa').remove(); document.getElementById('tQa').remove();");
+  eq("Session and quest added", g("[S.sessions.length,S.quests[0].status]"), [1,"open"]);
+
+  // ---- kineticist: impulse damage and picker ----
+  g(`(function(){ newChar("Test kineticist"); S.abil={str:12,dex:20,con:20,int:14,wis:16,cha:16}; S.hd=[{die:8,total:9,used:0,cls:"Kineticist",caster:"none"}];
+    S.kin={abil:"con",blastAbil:"dex",ilvl:1,aura:false,stance:"",gather:"",blast:{dice:"1d8",count:1,range:""},auraNote:"",elements:["Fire","Air"],junction:"Fire",bonusKnown:2,impulses:[]};
+    learnImpulse("Flying Flame"); learnImpulse("Storm Spiral"); learnImpulse("Ash Strider"); tab="impulses"; render(); })()`);
+  eq("Flying Flame at impulse level 5 with the fire junction", g("S.kin.impulses[0].dmg"), "5d6+5 fire, Dex save half");
+  eq("Storm Spiral at impulse level 5", g("S.kin.impulses[1].dmg"), "3d12 lightning + 1d10 thunder, Dex save half, deafened on a fail");
+  eq("Ash Strider (composite) gets no junction bonus", g("S.kin.impulses[2].dmg"), "5d6 fire, Dex save half");
+  g("impulsePickerModal();");
+  const names=g("[...document.querySelectorAll('[data-a=impLearn]')].map(b=>b.dataset.k)");
+  check("Picker shows only Fire, Air and Air/Fire impulses up to 5th level", names.length>0&&names.every(n=>{ const x=g(`impCat(${JSON.stringify(n)})`); return x[2]<=5&&x[1].split("/").every(e=>["Fire","Air"].includes(e)); }), names.join(", "));
+  check("Picker hides impulses you already know", !names.includes("Flying Flame"));
+  g("closeModal(); activeC=Object.keys(CH).find(id=>CH[id].name==='Test Galesh'); activate(); render();");
+
   // ---- town: building income, initiative, events ----
   g("if(!T) newTown('Test town'); T.income=[{name:'Tax',amt:100}]; T.expenses=[{name:'Wages',amt:30}]; T.projects=[{name:'Mill',cost:0,status:'Done',income:50},{name:'Wall',cost:0,status:'Building',income:500}]; render();");
   eq("Town income counts finished buildings only", g("townNet()"), 120);
