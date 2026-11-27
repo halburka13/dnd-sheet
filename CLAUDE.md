@@ -11,8 +11,30 @@ Sync backend: Supabase project **`jxhmfqjrlcwkvunzyuwl`** (Postgres + Auth, emai
 ## About the user
 - The owner is a mechanical engineering undergrad, not a web developer. Explain changes in plain language, give exact commands, and say which device steps (tablet, browser) are needed after a deploy.
 - The main device is a Samsung Galaxy Tab S10 FE (Android, Chrome).
-- The GM is a CENG grad student and may read `DEVELOPER.md` or contribute.
-- The main character is **Galesh Nesta**: Changeling, Warlock 3 (Hexblade, Pact of the Blade) / Wizard 6, plus spells from a lost Magic Initiate (Sorcerer) item. Data lives in Supabase, not in code. `DEFAULT` in `index.html` is only the v1 seed and is used for legacy migration.
+- The GM is a CENG grad student and may read `DEVELOPER.md` or contribute. **The GM may also use Claude on this repo:** the "Campaign" and "Character data" sections below are written for that too.
+- Character data lives in Supabase, not in code. `DEFAULT` in `index.html` is only the v1 seed and is used for legacy migration.
+
+## Campaign (what the player has, as of 2026-11-27)
+- **Party:** Galesh (player), a Chronurgy wizard, a dragon-themed circle druid, a shadow monk. Galesh and the kineticist are the same player and are **not played at the same time**.
+- **Town:** one shared town, **Evermore** (towns table, owner = the player). The GM can be given access with Town → Share.
+- **Galesh Nesta:** Changeling, Warlock 3 (Hexblade, Pact of the Blade) / Wizard 6 (**Bladesinging**), plus spells from a lost Magic Initiate (Sorcerer) item. Proficiency +4. Weapons: **hand crossbow** (Hex Warrior, Cha) and a **one-handed warhammer** as pact weapon (Cha). Features include Bladesong (4/long rest), Extra Attack, Training in War and Song. Plans to take **Crossbow Expert** at the next level (Warlock 4) for a bonus-action hand crossbow shot.
+- **“Unnamed kineticist”** (name still to be chosen): Custom Lineage (darkvision), Folk Hero, **Kineticist 9** from the homebrew below, **Weaver** subclass, **Fire main / Air second**. Str 12, Dex 20, Con 20, Int 14, Wis 16, Cha 16. HP 101 (rolled), AC 17 (studded leather). Feats: **Slasher** (level 1, +1 Dex), **Lucky** (level 8); +2 Dex at level 4. Impulse DC 17, impulse attack +9, blasts +9 / 1d8+5, 2 per action.
+- **Kineticist homebrew:** class https://homebrewery.naturalcrit.com/share/3F3ghSEF-m5j , impulse list https://homebrewery.naturalcrit.com/share/67acIrX07oMQ (use `/source/` instead of `/share/` to read the raw markdown).
+- **GM rulings so far:**
+  - A Weaver can learn **any impulse from any of their elements** whenever they gain a new impulse (not only the two level-1 impulses from Second Gate).
+  - Impulses **don’t count as spells** for feats and their prerequisites (Elemental Adept, Spell Sniper, War Caster…). They still count as spells for Counterspell, Dispel Magic and Detect Magic, as the homebrew says.
+  - Bladesinger Extra Attack: **only one** of the two attacks can be replaced by a cantrip (RAW). The app enforces this.
+  - 2014 rules otherwise; all official books allowed, flying races allowed.
+- **Open questions for the GM:** does Ash Strider get the +5 fire Impulse Junction damage; can the Loxodon-style “trunk as free hand” idea be ignored (it was dropped); gold and magic items for the kineticist.
+
+## Character data (fields beyond the basics)
+- `kin` (kineticist only): `{abil, blastAbil, ilvl, aura, stance, gather, blast:{dice,count,range}, auraNote, impulses:[{name, el, lvl, type: Stance|Basic|Surge|Complex, act, range, dmg, text, c}]}`. Shows the Impulses tab and the Aura button. Surge/Complex = overflow (aura off; locked for the rest of the round in combat).
+- Spells may carry damage: `dmg` (at the spell’s own level, e.g. `8d6 fire`, `1d10+5 force ×2 beams`, `+1d8 thunder`), `up` (per slot level above), `hit` (`attack` | `save` | `weapon` | `auto`), `save`, `note`. Spells named “…Smite” become a pending rider (`S.riders`) added to the next melee weapon hit instead of rolling on cast.
+- A feature named `Bladesong` enables the Bladesong toggle (`S.bladesong`: AC + Int, speed +10).
+- `S.combat` = current turn tracker state `{on, round, action, bonus, reaction, move, atk, atkKind, cantripSwap, gather, auraLock, init}`. Past combats are **not** kept (`combats` is set to `null`). `S.rollMode` = `normal|adv|dis`.
+- Attack lines (`attacks`) are weapons/blasts only; cantrips are cast from the Spells list. Attack rolls are two-phase: roll to hit, then the player taps Hit or Miss before damage is rolled.
+- **Sync caveat:** `merge3` treats a key missing on one side as “keep the other side”, so **deleting a key never syncs**. To clear a field, set it to `null` (or an empty array). Arrays are merged as whole values.
+- Editing a character directly in the database is fine (the app merges it), but bump `rev` by 1 and set `data.updatedAt` to the current epoch ms so devices pick it up.
 
 ## Architecture (no build step, no framework)
 - `index.html` holds all CSS and JS for the character app: render functions per tab return HTML strings, plus one delegated `click` / `input` / `change` handler using `data-a` (action), `data-k`, `data-i` and `data-b` (bind path, e.g. `hp.cur`, `town.treasury`).
@@ -39,7 +61,7 @@ Sync backend: Supabase project **`jxhmfqjrlcwkvunzyuwl`** (Postgres + Auth, emai
 - Use the Supabase MCP for schema changes (`apply_migration`), then run security advisors. Never put the service-role key in client code. The publishable key in `config.js` is meant to be public.
 
 ## Workflow
-- **Test:** `npm install` once, then `npm test`. This runs jsdom smoke tests for both apps and the merge rules. Run it after every change, and after `python build-town.py`.
+- **Test:** there is no automated test suite in the repo yet. Serve the folder locally (`python -m http.server 8765` in the repo) and check both `/` and `/town/` in a browser, with a test character loaded through Sync → Load backup. Unregister the service worker between test runs, or you get the cached old page.
 - **Deploy:** commit and push to `main`. GitHub Pages publishes in about 1 minute.
 - **When to bump caches:** bump `CACHE` in `sw.js` (and `town/sw.js`) whenever the service worker logic changes or you need devices to drop stale files.
 - **After a deploy, tell the user:** open the app twice on each device.
